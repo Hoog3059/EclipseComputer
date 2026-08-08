@@ -4,6 +4,8 @@ import time
 import gphoto2 as gp
 from enum import IntEnum
 from gp_error import GP_ERROR
+import atexit
+from available_camera_settings import available_apertures, available_isos, available_shutterspeeds
 
 
 class SetPropertyCommand():
@@ -33,6 +35,21 @@ class IntervallometerCommand():
         self.interval_s = interval_s
 
 
+class CaptureBracketCommand():
+    __match_args__ = ("iso", "aperture", "start_shutterspeed", "stop_shutterspeed")
+
+    def __init__(self, iso, aperture, start_shutterspeed, stop_shutterspeed):
+        assert iso in available_isos
+        assert aperture in available_apertures
+        assert start_shutterspeed in available_shutterspeeds
+        assert stop_shutterspeed in available_shutterspeeds
+
+        self.iso = iso
+        self.aperture = aperture
+        self.start_shutterspeed = start_shutterspeed
+        self.stop_shutterspeed = stop_shutterspeed
+
+
 class CameraCommand(IntEnum):
     STOP_VIEWFINDER = 10
     START_VIEWFINDER = 11
@@ -54,7 +71,21 @@ class CameraCommand(IntEnum):
     FOCUS_FAR_2 = 25
     FOCUS_FAR_3 = 26
 
-    TOTALITY_IMAGE_BURST = 99
+    BRACKET_NEXT_EXPOSURE = 30
+
+    START_TOTALITY_IMAGE_BURST = 99
+    STOP_TOTALITY_IMAGE_BURST = 98
+
+
+camera = None
+
+
+def close_camera_connection():
+    if camera is not None:
+        camera.exit()
+
+
+atexit.register(close_camera_connection)
 
 
 command_queue = queue.Queue(maxsize=10)
@@ -65,6 +96,7 @@ camera_state = {
     "connected": False,
 
     "intervallometer_active": False,
+    "totality_burst_active": False,
 
     "viewfinder": False,
     "preview_capture": False,
@@ -75,6 +107,9 @@ camera_state = {
     "shutterspeed": "0",
     "aperture": "0",
 }
+
+current_bracket = None
+current_bracket_exposure = None
 
 intervallometer_last_capture = time.time()
 intervallometer_interval = 0
@@ -90,6 +125,14 @@ def get_state(name=None, full=False):
         if full:
             return camera_state.copy()
         return camera_state.copy().get(name)
+
+
+def camera_stop():
+    try:
+        while True:
+            command_queue.get_nowait()
+    except queue.Empty as e:
+        pass
 
 
 def camera_worker():
@@ -123,14 +166,10 @@ def camera_worker():
 
         # --- Check whether we're still connected ---
         error, _ = gp.gp_camera_get_storageinfo(camera)
-        if error == GP_ERROR.IO_USB_FIND:
-            # Not connected
+        if error <= GP_ERROR.OK:
+            # Not connected or connection issue
             update_state("connected", False)
             continue
-        elif error != GP_ERROR.OK:
-            # Unhandled error
-            update_state("connected", False)
-            raise gp.GPhoto2Error(error)
         else:
             # No error
             pass
@@ -174,10 +213,18 @@ def camera_worker():
                 _capture(camera, widget)
             case CameraCommand.CAPTURE_SINGLE_HQ_PREVIEW:
                 _capture_hq_preview(camera, widget)
-            case CameraCommand.TOTALITY_IMAGE_BURST:
+            case CameraCommand.START_TOTALITY_IMAGE_BURST:
                 _totality_image_burst(camera, widget)
             case IntervallometerCommand(start_stop, interval_s):
                 _start_stop_intervallometer(start_stop, interval_s)
+
+            # --- Brackets ---
+            case CaptureBracketCommand(iso, aperture, start_shutterspeed, stop_shutterspeed):
+                pass
+            case CameraCommand.BRACKET_NEXT_EXPOSURE:
+                pass
+
+            # --- Fallthrough ---
             case _:
                 raise ValueError(f"Command {command} is not a valid command.")
 
@@ -232,18 +279,17 @@ def _totality_image_burst(camera, widget):
         camera.set_config(widget)
         _capture(camera, widget)
         _wait_for_capture_finish(
-            camera,
-            500,
-            2,
-            int(eval(exposure)*1000 + 1000)
+            camera=camera,
+            total_timeout_ms=int(eval(exposure)*1000 + 1000)
         )
         # _wait_for_idle(camera, int(eval(exposure)*1000 + 1000))
 
 
-def _wait_for_capture_finish(camera, timeout_after_file_creation=500, file_creation_counts_to_wait_for=2, total_timeout=10000):
+def _wait_for_capture_finish(camera, timeout_after_file_creation_ms=1000, file_creation_counts_to_wait_for=2, total_timeout_ms=10000):
     file_creations_counted = 0
     while file_creations_counted < file_creation_counts_to_wait_for:
-        error, event_type, event_data = gp.gp_camera_wait_for_event(camera, total_timeout)
+        error, event_type, event_data = gp.gp_camera_wait_for_event(
+            camera, total_timeout_ms)
         if event_type == gp.GP_EVENT_FILE_ADDED:
             file_creations_counted += 1
         elif event_type == gp.GP_EVENT_TIMEOUT:
@@ -251,7 +297,7 @@ def _wait_for_capture_finish(camera, timeout_after_file_creation=500, file_creat
         else:
             pass
 
-    time.sleep(timeout_after_file_creation)
+    time.sleep(timeout_after_file_creation_ms / 1000)
 
 
 def _wait_for_idle(camera, timeout=1000):

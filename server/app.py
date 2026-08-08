@@ -5,7 +5,7 @@ from flask import Flask, Response, jsonify, render_template_string, request
 import gphoto2 as gp
 from flask_cors import CORS, cross_origin
 
-from camera_worker import SetPropertyCommand, camera_worker, preview_frame_queue, command_queue, CameraCommand, get_state
+from camera_worker import SetPropertyCommand, camera_worker, preview_frame_queue, command_queue, CameraCommand, get_state, IntervallometerCommand
 
 app = Flask(__name__)
 cors = CORS(app)
@@ -101,14 +101,25 @@ def capture_hq_preview():
 
 @app.route("/camera/totality_image_burst")
 def totality_image_burst():
-    command_queue.put(CameraCommand.TOTALITY_IMAGE_BURST)
+    command_queue.put(CameraCommand.START_TOTALITY_IMAGE_BURST)
+    return "", 202
+
+
+@app.route("/camera/start_intervallometer")
+def start_intervallometer():
+    interval_s = int(request.args.get("interval_s"))
+    command_queue.put(IntervallometerCommand(True, interval_s))
+    return "", 202
+
+@app.route("/camera/stop_intervallometer")
+def stop_intervallometer():
+    command_queue.put(IntervallometerCommand(False))
     return "", 202
 
 
 @app.route("/status")
 def status():
     response = jsonify(get_state(full=True))
-    response.headers.add("Access-Control-Allow-Origin", "*")
     return response
 
 
