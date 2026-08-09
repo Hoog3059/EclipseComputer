@@ -6,75 +6,43 @@ from enum import IntEnum
 from gp_error import GP_ERROR
 import atexit
 from available_camera_settings import available_apertures, available_isos, available_shutterspeeds
+import camera_commands
+from camera_commands import SetPropertyCommand
 
 
-class SetPropertyCommand():
-    __match_args__ = ("property_name", "value")
-
-    _allowed_properties = [
-        "iso",
-        "shutterspeed",
-        "aperture",
-    ]
-
-    def __init__(self, property_name, value):
-        self.property_name = property_name
-        self.value = value
 
 
-class IntervallometerCommand():
-    __match_args__ = ("start_stop", "interval_s")
-
-    def __init__(self, start_stop, interval_s=None):
-        self.start_stop = start_stop
-
-        if start_stop and interval_s is None:
-            raise ValueError(
-                "If start_stop == True, then interval_s must not be None.")
-
-        self.interval_s = interval_s
 
 
-class CaptureBracketCommand():
-    __match_args__ = ("iso", "aperture", "start_shutterspeed", "stop_shutterspeed")
-
-    def __init__(self, iso, aperture, start_shutterspeed, stop_shutterspeed):
-        assert iso in available_isos
-        assert aperture in available_apertures
-        assert start_shutterspeed in available_shutterspeeds
-        assert stop_shutterspeed in available_shutterspeeds
-
-        self.iso = iso
-        self.aperture = aperture
-        self.start_shutterspeed = start_shutterspeed
-        self.stop_shutterspeed = stop_shutterspeed
 
 
-class CameraCommand(IntEnum):
-    STOP_VIEWFINDER = 10
-    START_VIEWFINDER = 11
 
-    STOP_PREVIEW = 12
-    CAPTURE_PREVIEW = 13
-    CAPTURE_SINGLE_HQ_PREVIEW = 14
-    START_PREVIEW = 15
 
-    TURN_OFF_UI = 16
-    TURN_ON_UI = 17
+# class CameraCommand(IntEnum):
+#     STOP_VIEWFINDER = 10
+#     START_VIEWFINDER = 11
 
-    CAPTURE = 18
+#     STOP_PREVIEW = 12
+#     CAPTURE_PREVIEW = 13
+#     CAPTURE_SINGLE_HQ_PREVIEW = 14
+#     START_PREVIEW = 15
 
-    FOCUS_NEAR_1 = 21
-    FOCUS_NEAR_2 = 22
-    FOCUS_NEAR_3 = 23
-    FOCUS_FAR_1 = 24
-    FOCUS_FAR_2 = 25
-    FOCUS_FAR_3 = 26
+#     TURN_OFF_UI = 16
+#     TURN_ON_UI = 17
 
-    BRACKET_NEXT_EXPOSURE = 30
+#     CAPTURE = 18
 
-    START_TOTALITY_IMAGE_BURST = 99
-    STOP_TOTALITY_IMAGE_BURST = 98
+#     FOCUS_NEAR_1 = 21
+#     FOCUS_NEAR_2 = 22
+#     FOCUS_NEAR_3 = 23
+#     FOCUS_FAR_1 = 24
+#     FOCUS_FAR_2 = 25
+#     FOCUS_FAR_3 = 26
+
+#     BRACKET_NEXT_EXPOSURE = 30
+
+#     START_TOTALITY_IMAGE_BURST = 99
+#     STOP_TOTALITY_IMAGE_BURST = 98
 
 
 camera = None
@@ -166,7 +134,7 @@ def camera_worker():
 
         # --- Check whether we're still connected ---
         error, _ = gp.gp_camera_get_storageinfo(camera)
-        if error <= GP_ERROR.OK:
+        if error < GP_ERROR.OK:
             # Not connected or connection issue
             update_state("connected", False)
             continue
@@ -190,39 +158,34 @@ def camera_worker():
 
         command = command_queue.get()
         match command:
-            case SetPropertyCommand(property_name, value):
+            case camera_commands.SetPropertyCommand(property_name, value):
                 _set_property(camera, widget, property_name, value)
-            case CameraCommand.START_VIEWFINDER:
-                _start_viewfinder(camera, widget)
-            case CameraCommand.STOP_VIEWFINDER:
-                _stop_viewfinder(camera, widget)
-            case CameraCommand.START_PREVIEW:
+            case camera_commands.StartPreview():
                 _start_preview(camera, widget)
-            case CameraCommand.CAPTURE_PREVIEW:
+            case camera_commands.CapturePreview():
                 _capture_preview(camera)
-            case CameraCommand.STOP_PREVIEW:
-                _stop_preview()
-            case c if CameraCommand.FOCUS_NEAR_1 <= c <= CameraCommand.FOCUS_FAR_3:
-                # Redirect all manual focus commands to the same handler
+            case camera_commands.StopPreview():
+                _stop_preview(camera, widget)
+            case camera_commands.ManualFocus():
                 _manual_focus_drive(camera, widget, command)
-            case CameraCommand.TURN_OFF_UI:
+            case camera_commands.TurnOnUI():
                 _set_property(camera, widget, "uilock", 0)
-            case CameraCommand.TURN_ON_UI:
+            case camera_commands.TurnOffUI():
                 _set_property(camera, widget, "uilock", 1)
-            case CameraCommand.CAPTURE:
-                _capture(camera, widget)
-            case CameraCommand.CAPTURE_SINGLE_HQ_PREVIEW:
-                _capture_hq_preview(camera, widget)
-            case CameraCommand.START_TOTALITY_IMAGE_BURST:
-                _totality_image_burst(camera, widget)
-            case IntervallometerCommand(start_stop, interval_s):
-                _start_stop_intervallometer(start_stop, interval_s)
+            # case CameraCommand.CAPTURE:
+            #     _capture(camera, widget)
+            # case CameraCommand.CAPTURE_SINGLE_HQ_PREVIEW:
+            #     _capture_hq_preview(camera, widget)
+            # case CameraCommand.START_TOTALITY_IMAGE_BURST:
+            #     _totality_image_burst(camera, widget)
+            # case IntervallometerCommand(start_stop, interval_s):
+            #     _start_stop_intervallometer(start_stop, interval_s)
 
             # --- Brackets ---
-            case CaptureBracketCommand(iso, aperture, start_shutterspeed, stop_shutterspeed):
-                pass
-            case CameraCommand.BRACKET_NEXT_EXPOSURE:
-                pass
+            # case CaptureBracketCommand(iso, aperture, start_shutterspeed, stop_shutterspeed):
+            #     pass
+            # case CameraCommand.BRACKET_NEXT_EXPOSURE:
+            #     pass
 
             # --- Fallthrough ---
             case _:
@@ -335,33 +298,17 @@ def _set_property(camera, widget, property_name, value):
     widget.get_child_by_name(property_name).set_value(value)
     camera.set_config(widget)
 
-
-def _start_viewfinder(camera, widget):
-    widget.get_child_by_name("viewfinder").set_value(1)
-    camera.set_config(widget)
-    update_state("viewfinder", True)
-
-
-def _stop_viewfinder(camera, widget):
-    # For some reason this only works if you first enable it, and then disable it
-    widget.get_child_by_name("viewfinder").set_value(1)
-    camera.set_config(widget)
-    widget.get_child_by_name("viewfinder").set_value(0)
-    camera.set_config(widget)
-    update_state("viewfinder", False)
-
-
+#region Preview
 def _start_preview(camera, widget):
     update_state("preview_capture", True)
-    command_queue.put(SetPropertyCommand("liveviewsize", "Large"))
-    command_queue.put(CameraCommand.CAPTURE_PREVIEW)
+    command_queue.put(camera_commands.CapturePreview())
 
 
 def _capture_preview(camera):
     if not get_state("preview_capture"):
         return
 
-    command_queue.put(CameraCommand.CAPTURE_PREVIEW)
+    command_queue.put(camera_commands.CapturePreview())
 
     error, frame_file = gp.gp_camera_capture_preview(camera)
     if error >= GP_ERROR.OK:
@@ -377,32 +324,21 @@ def _capture_preview(camera):
         # time.sleep(1/30) # Limit framerate
 
 
-def _stop_preview():
+def _stop_preview(camera, widget):
     update_state("preview_capture", False)
+    # Also disable the viewfinder.
+    # For some reason this only works if you first enable it, and then disable it
+    widget.get_child_by_name("viewfinder").set_value(1)
+    camera.set_config(widget)
+    widget.get_child_by_name("viewfinder").set_value(0)
+    camera.set_config(widget)
+#endregion
 
-
-def _manual_focus_drive(camera, widget, command):
-    # Based on gphoto2 --get-config manualfocusdrive
-    command_mapping = {
-        CameraCommand.FOCUS_NEAR_1: 'Near 1',
-        CameraCommand.FOCUS_NEAR_2: 'Near 2',
-        CameraCommand.FOCUS_NEAR_3: 'Near 3',
-        # None command: 'None',
-        CameraCommand.FOCUS_FAR_1: 'Far 1',
-        CameraCommand.FOCUS_FAR_2: 'Far 2',
-        CameraCommand.FOCUS_FAR_3: 'Far 3',
-    }
-    # Do nothing if command is not found
-    command_text = command_mapping.get(command, 3)
-    widget.get_child_by_name("manualfocusdrive").set_value(command_text)
+def _manual_focus_drive(camera, widget, command: camera_commands.ManualFocus):
+    widget.get_child_by_name("manualfocusdrive").set_value(command.focus.value)
     camera.set_config(widget)
 
 
 if __name__ == "__main__":
     worker_thread = threading.Thread(target=camera_worker, daemon=True)
     worker_thread.start()
-
-    while True:
-        input_command = int(input("cam> "))
-        command = CameraCommand(input_command)
-        command_queue.put(command)

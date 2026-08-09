@@ -5,7 +5,8 @@ from flask import Flask, Response, jsonify, render_template_string, request
 import gphoto2 as gp
 from flask_cors import CORS, cross_origin
 
-from camera_worker import SetPropertyCommand, camera_worker, preview_frame_queue, command_queue, CameraCommand, get_state, IntervallometerCommand
+from camera_worker import camera_worker, preview_frame_queue, command_queue, get_state
+import camera_commands
 
 app = Flask(__name__)
 cors = CORS(app)
@@ -52,31 +53,19 @@ def video_feed():
 
 @app.route("/camera/start_preview")
 def start_preview():
-    command_queue.put(CameraCommand.START_PREVIEW)
+    command_queue.put(camera_commands.StartPreview())
     return "", 202  # Accepted
 
 
 @app.route("/camera/stop_preview")
 def stop_preview():
-    command_queue.put(CameraCommand.STOP_PREVIEW)
-    return "", 202  # Accepted
-
-
-@app.route("/camera/start_viewfinder")
-def start_viewfinder():
-    command_queue.put(CameraCommand.START_VIEWFINDER)
-    return "", 202  # Accepted
-
-
-@app.route("/camera/stop_viewfinder")
-def stop_viewfinder():
-    command_queue.put(CameraCommand.STOP_VIEWFINDER)
+    command_queue.put(camera_commands.StopPreview())
     return "", 202  # Accepted
 
 
 @app.route("/camera/manualfocus/<string:focus_command>")
 def manual_focus(focus_command):
-    command = CameraCommand[f"FOCUS_{focus_command.upper()}"]
+    command = camera_commands.ManualFocus(camera_commands.ManualFocus.FocusOption[focus_command.upper()])
     command_queue.put(command)
     return "", 202  # Accepted
 
@@ -84,37 +73,37 @@ def manual_focus(focus_command):
 @app.route("/camera/set_property/<string:property_name>")
 def set_property(property_name):
     value = request.args.get("value")
-    command_queue.put(SetPropertyCommand(property_name, value))
+    command_queue.put(camera_commands.SetPropertyCommand(property_name, value))
     return "", 202  # Accepted
 
 
-@app.route("/camera/capture")
-def capture():
-    command_queue.put(CameraCommand.CAPTURE)
-    return "", 202
+# @app.route("/camera/capture")
+# def capture():
+#     command_queue.put(CameraCommand.CAPTURE)
+#     return "", 202
 
-@app.route("/camera/capture_hq_preview")
-def capture_hq_preview():
-    command_queue.put(CameraCommand.CAPTURE_SINGLE_HQ_PREVIEW)
-    return "", 202
-
-
-@app.route("/camera/totality_image_burst")
-def totality_image_burst():
-    command_queue.put(CameraCommand.START_TOTALITY_IMAGE_BURST)
-    return "", 202
+# @app.route("/camera/capture_hq_preview")
+# def capture_hq_preview():
+#     command_queue.put(CameraCommand.CAPTURE_SINGLE_HQ_PREVIEW)
+#     return "", 202
 
 
-@app.route("/camera/start_intervallometer")
-def start_intervallometer():
-    interval_s = int(request.args.get("interval_s"))
-    command_queue.put(IntervallometerCommand(True, interval_s))
-    return "", 202
+# @app.route("/camera/totality_image_burst")
+# def totality_image_burst():
+#     command_queue.put(CameraCommand.START_TOTALITY_IMAGE_BURST)
+#     return "", 202
 
-@app.route("/camera/stop_intervallometer")
-def stop_intervallometer():
-    command_queue.put(IntervallometerCommand(False))
-    return "", 202
+
+# @app.route("/camera/start_intervallometer")
+# def start_intervallometer():
+#     interval_s = int(request.args.get("interval_s"))
+#     command_queue.put(IntervallometerCommand(True, interval_s))
+#     return "", 202
+
+# @app.route("/camera/stop_intervallometer")
+# def stop_intervallometer():
+#     command_queue.put(IntervallometerCommand(False))
+#     return "", 202
 
 
 @app.route("/status")
