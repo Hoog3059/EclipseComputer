@@ -118,6 +118,7 @@ const intervallometer_running = ref(false);
 const intervallometer_interval = ref(10);
 
 const totality_bracket_running = ref(false);
+const totality_bracket_iso = ref("200");
 
 async function fetchStatus() {
   try {
@@ -152,12 +153,17 @@ async function fetchStatus() {
     // intervallometer_interval.value = data.intervallometer_interval;
 
     totality_bracket_running.value = data.totality_bracket_running;
+    totality_bracket_iso.value = data.totality_bracket_iso;
   } catch (error) {
     server_connected.value = false;
     console.error('Error fetching camera status:', error);
   }
 }
 setInterval(fetchStatus, 1000);
+
+async function totalityBracketSettingChanged() {
+  await fetch(`${api_url}/camera/totality_bracket?iso=${totality_bracket_iso.value}`);
+}
 
 async function bracketSettingChanged() {
   await fetch(`${api_url}/camera/partiality_bracket?iso=${partiality_bracket_iso.value}&aperture=${partiality_bracket_aperture.value}&shutterspeed_1=${partiality_bracket_shutterspeed_1.value}&shutterspeed_2=${partiality_bracket_shutterspeed_2.value}&shutterspeed_3=${partiality_bracket_shutterspeed_3.value}`);
@@ -274,7 +280,8 @@ function refreshLastCapture() {
           <label>Shutterspeeds</label>
         </div>
         <div class="row space-around labelled-dropdown-box">
-          <select :disabled="partiality_bracket_running" v-model="partiality_bracket_shutterspeed_1" @change="bracketSettingChanged">
+          <select :disabled="partiality_bracket_running" v-model="partiality_bracket_shutterspeed_1"
+            @change="bracketSettingChanged">
             <option value="30">30</option>
             <option value="25">25</option>
             <option value="20">20</option>
@@ -328,7 +335,8 @@ function refreshLastCapture() {
             <option value="1/3200">1/3200</option>
             <option value="1/4000">1/4000</option>
           </select>
-          <select :disabled="partiality_bracket_running" v-model="partiality_bracket_shutterspeed_2" @change="bracketSettingChanged">
+          <select :disabled="partiality_bracket_running" v-model="partiality_bracket_shutterspeed_2"
+            @change="bracketSettingChanged">
             <option value="30">30</option>
             <option value="25">25</option>
             <option value="20">20</option>
@@ -382,7 +390,8 @@ function refreshLastCapture() {
             <option value="1/3200">1/3200</option>
             <option value="1/4000">1/4000</option>
           </select>
-          <select :disabled="partiality_bracket_running" v-model="partiality_bracket_shutterspeed_3" @change="bracketSettingChanged">
+          <select :disabled="partiality_bracket_running" v-model="partiality_bracket_shutterspeed_3"
+            @change="bracketSettingChanged">
             <option value="30">30</option>
             <option value="25">25</option>
             <option value="20">20</option>
@@ -459,6 +468,21 @@ function refreshLastCapture() {
 
       <section class="vertical-gaps">
         <h1>Totality</h1>
+        <div class="row space-around">
+          <div class="labelled-dropdown-box">
+            <label>ISO</label>
+            <select :disabled="totality_bracket_running" v-model="totality_bracket_iso"
+              @change="totalityBracketSettingChanged">
+              <option value="100">100</option>
+              <option value="200">200</option>
+              <option value="400">400</option>
+              <option value="800">800</option>
+              <option value="1600">1600</option>
+              <option value="3200">3200</option>
+              <option value="6400">6400</option>
+            </select>
+          </div>
+        </div>
         <div class="row">
           <button class="big-action-button" v-if="!totality_bracket_running" @click="startTotalityBracket">Start
             Totality</button>
@@ -472,7 +496,7 @@ function refreshLastCapture() {
     <!-- Preview mode -->
     <main v-show="uiMode === 'preview'">
       <section id="preview-viewport">
-        <img id="preview-content" :src="api_url + '/preview_feed'" width="1056" height="704"/>
+        <img id="preview-content" :src="api_url + '/preview_feed'" width="1056" height="704" />
       </section>
       <div class="focus-button-container">
         <button :disabled="!focus_enabled" class="focus-button"

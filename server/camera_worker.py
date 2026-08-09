@@ -55,6 +55,7 @@ camera_state = {
 
     # Totality bracket
     "totality_bracket_running": False,
+    "totality_bracket_iso": "200",
 }
 
 

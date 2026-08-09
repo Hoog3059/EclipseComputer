@@ -181,14 +181,18 @@ def stop_partiality_intervallometer():
 # Totality bracket #
 ####################
 
+@app.route("/camera/totality_bracket")
+def totality_bracket():
+    iso = request.args.get("iso")
+    update_state("totality_bracket_iso", iso)
+    return "", 202
 
 @app.route("/camera/totality_bracket/start")
 def start_totality_bracket():
     command = camera_commands.CaptureBracket(
-        "200",
+        get_state("totality_bracket_iso"),
         "8",
         [
-            "1/8000",
             "1/4000",
             "1/2000",
             "1/1000",
