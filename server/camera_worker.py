@@ -145,6 +145,7 @@ def camera_worker():
 
         # --- Handle commands for camera in queue ---
         if command_queue.empty():
+            error, event_type, event_data = gp.gp_camera_wait_for_event(camera, 100) # Try to keep the camera event queue empty.
             continue
 
         command = command_queue.get()

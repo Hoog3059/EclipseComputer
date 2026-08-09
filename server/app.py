@@ -262,10 +262,12 @@ def get_last_capture():
             placeholder = open("./placeholder_last_image.jpg", "rb").read()
             last_capture = placeholder
             break
-        
+
+    timestamp = int(time.time())
+    
     response = make_response(last_capture)
     response.headers.set('Content-Type', 'image/jpeg')
-    response.headers.set('Content-Disposition', 'attachment', filename='last_capture.jpg')
+    response.headers.set('Content-Disposition', 'attachment', filename=f'last_capture_{timestamp}.jpg')
     return response
 
 @app.route("/camera/last_capture_placeholder.jpg")
