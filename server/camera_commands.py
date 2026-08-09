@@ -62,7 +62,9 @@ class StartBracket():
     pass
 
 class BracketCaptureExposure():
-    def __init__(self, shutterspeed_current, shutterspeed_stop):
+    def __init__(self, iso, aperture, shutterspeed_current, shutterspeed_stop):
+        self.iso = iso
+        self.aperture = aperture
         self.shutterspeed_current = shutterspeed_current
         self.shutterspeed_stop = shutterspeed_stop
 

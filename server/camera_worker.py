@@ -178,14 +178,17 @@ def camera_worker():
             case camera_commands.PushBracketSettings():
                 update_state("bracket_iso", command.iso)
                 update_state("bracket_aperture", command.aperture)
-                update_state("bracket_shutterspeed_start",
-                             command.start_shutterspeed)
-                update_state("bracket_shutterspeed_stop",
-                             command.stop_shutterspeed)
+                update_state("bracket_shutterspeed_start", command.start_shutterspeed)
+                update_state("bracket_shutterspeed_stop", command.stop_shutterspeed)                
             case camera_commands.StartBracket():
+                next_exposure = camera_commands.BracketCaptureExposure(
+                    get_state("bracket_iso"),
+                    get_state("bracket_aperture"),
+                    get_state("bracket_shutterspeed_start"),
+                    get_state("bracket_shutterspeed_stop")
+                )
                 update_state("bracket_running", True)
-                command_queue.put(camera_commands.BracketCaptureExposure(get_state(
-                    "bracket_shutterspeed_start"), get_state("bracket_shutterspeed_stop")))
+                command_queue.put(next_exposure)
             case camera_commands.BracketCaptureExposure():
                 _bracket_capture_exposure(camera, widget, command)
 
@@ -222,13 +225,15 @@ def _bracket_capture_exposure(camera, widget, command: camera_commands.BracketCa
     if not get_state("bracket_running"):
         return
 
-    _set_property(camera, widget, "iso", get_state("bracket_iso"))
-    _set_property(camera, widget, "aperture", get_state("bracket_aperture"))
+    _set_property(camera, widget, "iso", command.iso)
+    _set_property(camera, widget, "aperture", command.aperture)
     _set_property(camera, widget, "shutterspeed", command.shutterspeed_current)
     _capture(camera, widget)
-    _wait_for_capture_finish(camera, total_timeout_ms=int(eval(command.shutterspeed_current)*1000 + 1000))
+    _wait_for_capture_finish(camera, total_timeout_ms=int(
+        eval(command.shutterspeed_current)*1000 + 1000))
 
     if command.shutterspeed_current == command.shutterspeed_stop:
+        update_state("bracket_running", False)
         return
 
     if available_shutterspeeds.index(command.shutterspeed_stop) < available_shutterspeeds.index(command.shutterspeed_current):
@@ -237,8 +242,9 @@ def _bracket_capture_exposure(camera, widget, command: camera_commands.BracketCa
         index_step = 1
 
     next_shutterspeed = available_shutterspeeds[available_shutterspeeds.index(command.shutterspeed_current) + index_step]
-    command_queue.put(camera_commands.BracketCaptureExposure(
-        next_shutterspeed, command.shutterspeed_stop))
+
+    command.shutterspeed_current = next_shutterspeed
+    command_queue.put(command)
 
 
 def _start_stop_intervallometer(start_stop, interval_s):

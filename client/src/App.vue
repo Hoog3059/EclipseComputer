@@ -79,8 +79,8 @@ const bracket_running = ref(false);
 
 const bracket_iso = ref("100");
 const bracket_aperture = ref("6.3");
-const bracket_shutterspeed_start = ref("1/1000");
-const bracket_shutterspeed_stop = ref("1/60");
+const bracket_shutterspeed_start = ref("1/60")
+const bracket_shutterspeed_stop = ref("1/20");
 
 const intervallometer_running = ref(false);
 const intervallometer_interval = ref(10);
@@ -158,7 +158,7 @@ setInterval(fetchStatus, 1000);
         <div class="row space-around">
           <div class="labelled-dropdown-box">
             <label>ISO</label>
-            <select v-model="bracket_iso" @change="bracketSettingChanged">
+            <select :disabled="bracket_running" v-model="bracket_iso" @change="bracketSettingChanged">
               <option value="Auto">Auto</option>
               <option value="100">100</option>
               <option value="200">200</option>
@@ -171,7 +171,7 @@ setInterval(fetchStatus, 1000);
           </div>
           <div class="labelled-dropdown-box">
             <label>Aperture</label>
-            <select v-model="bracket_aperture" @change="bracketSettingChanged">
+            <select :disabled="bracket_running" v-model="bracket_aperture" @change="bracketSettingChanged">
               <option value="6.3">6.3</option>
               <option value="7.1">7.1</option>
               <option value="8">8</option>
@@ -195,7 +195,7 @@ setInterval(fetchStatus, 1000);
         <div class="row space-around">
           <div class="labelled-dropdown-box">
             <label>Shutterspeed start</label>
-            <select v-model="bracket_shutterspeed_start" @change="bracketSettingChanged">
+            <select :disabled="bracket_running" v-model="bracket_shutterspeed_start" @change="bracketSettingChanged">
               <option value="30">30</option>
               <option value="25">25</option>
               <option value="20">20</option>
@@ -250,7 +250,7 @@ setInterval(fetchStatus, 1000);
               <option value="1/4000">1/4000</option>
             </select>
             <label>and stop</label>
-            <select v-model="bracket_shutterspeed_stop" @change="bracketSettingChanged">
+            <select :disabled="bracket_running" v-model="bracket_shutterspeed_stop" @change="bracketSettingChanged">
               <option value="30">30</option>
               <option value="25">25</option>
               <option value="20">20</option>
