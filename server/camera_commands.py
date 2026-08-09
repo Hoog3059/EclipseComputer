@@ -28,7 +28,7 @@ class ManualFocus():
         FAR_2 = "Far 2"
         FAR_3 = "Far 3"
 
-    def __init__(self, focus: ManualFocus.FocusOption):
+    def __init__(self, focus: FocusOption):
         self.focus = focus
 
 
