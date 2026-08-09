@@ -9,44 +9,16 @@ from available_camera_settings import available_apertures, available_isos, avail
 import camera_commands
 from camera_commands import SetPropertyCommand
 
-
-# class CameraCommand(IntEnum):
-#     STOP_VIEWFINDER = 10
-#     START_VIEWFINDER = 11
-
-#     STOP_PREVIEW = 12
-#     CAPTURE_PREVIEW = 13
-#     CAPTURE_SINGLE_HQ_PREVIEW = 14
-#     START_PREVIEW = 15
-
-#     TURN_OFF_UI = 16
-#     TURN_ON_UI = 17
-
-#     CAPTURE = 18
-
-#     FOCUS_NEAR_1 = 21
-#     FOCUS_NEAR_2 = 22
-#     FOCUS_NEAR_3 = 23
-#     FOCUS_FAR_1 = 24
-#     FOCUS_FAR_2 = 25
-#     FOCUS_FAR_3 = 26
-
-#     BRACKET_NEXT_EXPOSURE = 30
-
-#     START_TOTALITY_IMAGE_BURST = 99
-#     STOP_TOTALITY_IMAGE_BURST = 98
-
-
 camera = None
 
 
 def close_camera_connection():
     if camera is not None:
+        print("Attempting to close connection...")
         camera.exit()
 
 
 atexit.register(close_camera_connection)
-
 
 command_queue = queue.Queue(maxsize=10)
 preview_frame_queue = queue.Queue(maxsize=10)
@@ -55,35 +27,39 @@ camera_state_lock = threading.Lock()
 camera_state = {
     # Camera info
     "connected": False,
-    "uiLocked": False,
 
     "batterylevel": "0%",
 
-    "iso": "100",
-    "shutterspeed": "1/1000",
-    "aperture": "6.3",
+    "iso": "200",
+    "shutterspeed": "1/800",
+    "aperture": "8",
 
     # Preview info
     "preview_capture": False,
 
-    # Bracket
-    "bracket_running": False,
+    # All brackets
+    "stop_bracket": False,
 
-    "bracket_iso": "100",
-    "bracket_aperture": "6.3",
-    "bracket_shutterspeed_start": "1/1000",
-    "bracket_shutterspeed_stop": "1/10",
+    # Paritality bracket
+    "partiality_bracket_running": False,
 
-    # Intervallometer
+    "partiality_bracket_iso": "200",
+    "partiality_bracket_aperture": "8",
+    "partiality_bracket_shutterspeed_1": "1/1600",
+    "partiality_bracket_shutterspeed_2": "1/800",
+    "partiality_bracket_shutterspeed_3": "1/400",
+
+    # Partiality Intervallometer
     "intervallometer_running": False,
     "intervallometer_interval": 10,
+
+    # Totality bracket
+    "totality_bracket_running": False,
 }
 
-current_bracket = None
-current_bracket_exposure = None
 
-intervallometer_last_capture = time.time()
-intervallometer_interval = 0
+_intervallometer_last_capture = time.time()
+_intervallometer_function_to_call = None
 
 
 def update_state(name, value):
@@ -98,15 +74,22 @@ def get_state(name=None, full=False):
         return camera_state.copy().get(name)
 
 
-def camera_stop():
-    try:
-        while True:
-            command_queue.get_nowait()
-    except queue.Empty as e:
-        pass
+def start_intervallometer(function_to_call):
+    global _intervallometer_function_to_call
+    global _intervallometer_last_capture
+    _intervallometer_function_to_call = function_to_call
+    _intervallometer_last_capture = 0
+    update_state("intervallometer_running", True)
+
+
+def stop_intervallometer():
+    update_state("intervallometer_running", False)
 
 
 def camera_worker():
+    global camera
+    global _intervallometer_last_capture
+    global _intervallometer_function_to_call
     camera = gp.Camera()
 
     while True:
@@ -128,11 +111,8 @@ def camera_worker():
                 command_queue.put(
                     SetPropertyCommand("capturetarget", "Memory card")
                 )
-            elif error != GP_ERROR.MODEL_NOT_FOUND:
-                # Unhandled error
-                raise gp.GPhoto2Error(error)
             else:
-                # No camera found
+                # Connection issue
                 print("No camera found. Retrying...")
                 time.sleep(1)
 
@@ -156,6 +136,13 @@ def camera_worker():
         update_state("aperture", widget.get_child_by_name(
             "aperture").get_value())
 
+        # --- Intervallometer ---
+        if get_state("intervallometer_running"):
+            current_time = time.time()
+            if current_time > _intervallometer_last_capture + get_state("intervallometer_interval"):
+                _intervallometer_last_capture = current_time
+                _intervallometer_function_to_call()
+
         # --- Handle commands for camera in queue ---
         if command_queue.empty():
             continue
@@ -176,25 +163,11 @@ def camera_worker():
                 _set_property(camera, widget, "uilock", 0)
             case camera_commands.LockUI():
                 _set_property(camera, widget, "uilock", 1)
-            case camera_commands.PushBracketSettings():
-                update_state("bracket_iso", command.iso)
-                update_state("bracket_aperture", command.aperture)
-                update_state("bracket_shutterspeed_start", command.start_shutterspeed)
-                update_state("bracket_shutterspeed_stop", command.stop_shutterspeed)                
-            case camera_commands.StartBracket():
-                next_exposure = camera_commands.BracketCaptureExposure(
-                    get_state("bracket_iso"),
-                    get_state("bracket_aperture"),
-                    get_state("bracket_shutterspeed_start"),
-                    get_state("bracket_shutterspeed_stop")
-                )
-                update_state("bracket_running", True)
-                command_queue.put(next_exposure)
-            case camera_commands.BracketCaptureExposure():
-                _bracket_capture_exposure(camera, widget, command)
+            case camera_commands.CaptureBracket():
+                _bracket_capture_next_exposure(camera, widget, command)
 
-            # case CameraCommand.CAPTURE:
-            #     _capture(camera, widget)
+            case camera_commands.Capture():
+                _capture(camera, widget)
             # case CameraCommand.CAPTURE_SINGLE_HQ_PREVIEW:
             #     _capture_hq_preview(camera, widget)
             # case CameraCommand.START_TOTALITY_IMAGE_BURST:
@@ -212,87 +185,31 @@ def camera_worker():
             case _:
                 raise ValueError(f"Command {command} is not a valid command.")
 
-        # --- Intervallometer ---
-        if get_state("intervallometer_active"):
-            current_time = time.time()
-            if current_time > intervallometer_last_capture + intervallometer_interval:
-                intervallometer_last_capture = current_time
-                _capture(camera, widget)
-                # _wait_for_idle(camera)
-                _wait_for_capture_finish(camera)
 
+def _bracket_capture_next_exposure(camera, widget, command: camera_commands.CaptureBracket):
+    if get_state("stop_bracket"):
+        update_state("stop_bracket", False)
+        return
 
-def _bracket_capture_exposure(camera, widget, command: camera_commands.BracketCaptureExposure):
-    if not get_state("bracket_running"):
+    try:
+        current_shutterspeed = command.shutterspeeds.pop(0)
+    except IndexError:
+        # We captured all shutterspeeds
+        if command.capture_done_callback is not None:
+            command.capture_done_callback()
+
         return
 
     _set_property(camera, widget, "iso", command.iso)
     _set_property(camera, widget, "aperture", command.aperture)
-    _set_property(camera, widget, "shutterspeed", command.shutterspeed_current)
+    _set_property(camera, widget, "shutterspeed", current_shutterspeed)
     _capture(camera, widget)
-    _wait_for_capture_finish(camera, total_timeout_ms=int(
-        eval(command.shutterspeed_current)*1000 + 1000))
+    _wait_for_capture_finish(
+        camera,
+        total_timeout_ms=int(eval(current_shutterspeed)*1000 + 1000)
+    )
 
-    if command.shutterspeed_current == command.shutterspeed_stop:
-        update_state("bracket_running", False)
-        return
-
-    if available_shutterspeeds.index(command.shutterspeed_stop) < available_shutterspeeds.index(command.shutterspeed_current):
-        index_step = -1
-    else:
-        index_step = 1
-
-    next_shutterspeed = available_shutterspeeds[available_shutterspeeds.index(command.shutterspeed_current) + index_step]
-
-    command.shutterspeed_current = next_shutterspeed
     command_queue.put(command)
-
-
-def _start_stop_intervallometer(start_stop, interval_s):
-    if start_stop:
-        intervallometer_interval = interval_s
-        intervallometer_last_capture = 0
-        update_state("intervallometer_active", True)
-    else:
-        update_state("intervallometer_active", False)
-
-
-def _totality_image_burst(camera, widget):
-    widget.get_child_by_name("capturetarget").set_value("Memory card")
-    widget.get_child_by_name("imageformat").set_value("RAW + L")
-    widget.get_child_by_name("imageformatsd").set_value("RAW + L")
-    camera.set_config(widget)
-
-    widget.get_child_by_name("iso").set_value("200")
-    widget.get_child_by_name("aperture").set_value("6.3")
-    camera.set_config(widget)
-
-    exposures = [
-        "1/4000",
-        "1/2000",
-        "1/1000",
-        "1/500",
-        "1/250",
-        "1/125",
-        "1/60",
-        "1/30",
-        "1/15",
-        "1/8",
-        "1/4",
-        "0.5",
-        "1",
-        "2"
-    ]
-
-    for exposure in exposures:
-        widget.get_child_by_name("shutterspeed").set_value(exposure)
-        camera.set_config(widget)
-        _capture(camera, widget)
-        _wait_for_capture_finish(
-            camera=camera,
-            total_timeout_ms=int(eval(exposure)*1000 + 1000)
-        )
-        # _wait_for_idle(camera, int(eval(exposure)*1000 + 1000))
 
 
 def _wait_for_capture_finish(camera, timeout_after_file_creation_ms=1000, file_creation_counts_to_wait_for=2, total_timeout_ms=10000):
@@ -308,26 +225,6 @@ def _wait_for_capture_finish(camera, timeout_after_file_creation_ms=1000, file_c
             pass
 
     time.sleep(timeout_after_file_creation_ms / 1000)
-
-
-def _wait_for_idle(camera, timeout=1000):
-    event_type = None
-    while event_type != gp.GP_EVENT_TIMEOUT:
-        error, event_type, event_data = gp.gp_camera_wait_for_event(
-            camera, timeout)
-        time.sleep(0.01)
-
-
-def _capture_hq_preview(camera, widget):
-    old_capture_target = widget.get_child_by_name("capturetarget").get_value()
-    widget.get_child_by_name("capturetarget").set_value("Internal RAM")
-    camera.set_config(widget)
-    _capture(camera, widget)
-    camera.wait_for_event(1000)
-    print(camera.folder_list_files("/"))
-    file = camera.file_get("/", "capt0000.jpg", gp.GP_FILE_TYPE_NORMAL)
-    camera.file_delete("/", "capt0000.jpg")
-    raise NotImplementedError("Needs to be finished")
 
 
 def _capture(camera, widget):

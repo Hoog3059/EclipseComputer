@@ -32,44 +32,24 @@ class ManualFocus():
         self.focus = focus
 
 
-class IntervallometerCommand():
-    __match_args__ = ("start_stop", "interval_s")
-
-    def __init__(self, start_stop, interval_s=None):
-        self.start_stop = start_stop
-
-        if start_stop and interval_s is None:
-            raise ValueError(
-                "If start_stop == True, then interval_s must not be None.")
-
+class StartIntervallometer():
+    def __init__(self, function_to_call, interval_s):
+        self.function_to_call = function_to_call
         self.interval_s = interval_s
 
-class PushBracketSettings():
-    __match_args__ = ("iso", "aperture", "start_shutterspeed", "stop_shutterspeed")
 
-    def __init__(self, iso, aperture, start_shutterspeed, stop_shutterspeed):
-        assert iso in available_isos
-        assert aperture in available_apertures
-        assert start_shutterspeed in available_shutterspeeds
-        assert stop_shutterspeed in available_shutterspeeds
-
+class CaptureBracket():
+    def __init__(self, iso, aperture, shutterspeeds: list, capture_done_callback = None):
         self.iso = iso
         self.aperture = aperture
-        self.start_shutterspeed = start_shutterspeed
-        self.stop_shutterspeed = stop_shutterspeed
-
-class StartBracket():
-    pass
-
-class BracketCaptureExposure():
-    def __init__(self, iso, aperture, shutterspeed_current, shutterspeed_stop):
-        self.iso = iso
-        self.aperture = aperture
-        self.shutterspeed_current = shutterspeed_current
-        self.shutterspeed_stop = shutterspeed_stop
+        self.shutterspeeds = shutterspeeds
+        self.capture_done_callback = capture_done_callback
 
 class LockUI():
     pass
 
 class UnlockUI():
+    pass
+
+class Capture():
     pass

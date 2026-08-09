@@ -5,12 +5,37 @@ from flask import Flask, Response, jsonify, render_template_string, request
 import gphoto2 as gp
 from flask_cors import CORS, cross_origin
 
-from camera_worker import camera_worker, preview_frame_queue, command_queue, get_state, camera_stop, update_state
+from camera_worker import camera_worker, preview_frame_queue, command_queue, get_state, update_state, start_intervallometer
 import camera_commands
 
 app = Flask(__name__)
 cors = CORS(app)
 app.config['CORS_HEADERS'] = 'Content-Type'
+
+#################
+# System status #
+#################
+
+
+@app.route("/status")
+def status():
+    response = jsonify(get_state(full=True))
+    return response
+
+############################
+# General property setting #
+############################
+
+
+@app.route("/camera/set_property/<string:property_name>")
+def set_property(property_name):
+    value = request.args.get("value")
+    command_queue.put(camera_commands.SetPropertyCommand(property_name, value))
+    return "", 202  # Accepted
+
+################
+# Live preview #
+################
 
 
 def mjpeg_generator():
@@ -62,87 +87,149 @@ def stop_preview():
     command_queue.put(camera_commands.StopPreview())
     return "", 202  # Accepted
 
+################
+# Manual focus #
+################
+
 
 @app.route("/camera/manualfocus/<string:focus_command>")
 def manual_focus(focus_command):
-    command = camera_commands.ManualFocus(camera_commands.ManualFocus.FocusOption[focus_command.upper()])
+    command = camera_commands.ManualFocus(
+        camera_commands.ManualFocus.FocusOption[focus_command.upper()])
     command_queue.put(command)
     return "", 202  # Accepted
 
 
-@app.route("/camera/set_property/<string:property_name>")
-def set_property(property_name):
-    value = request.args.get("value")
-    command_queue.put(camera_commands.SetPropertyCommand(property_name, value))
-    return "", 202  # Accepted
+######################
+# Partiality bracket #
+######################
 
-@app.route("/camera/bracket")
-def bracket():
+
+@app.route("/camera/partiality_bracket")
+def partiality_bracket():
     iso = request.args.get("iso")
     aperture = request.args.get("aperture")
-    shutterspeed_start = request.args.get("shutterspeed_start")
-    shutterspeed_stop = request.args.get("shutterspeed_stop")
-    command = camera_commands.PushBracketSettings(
-        iso,
-        aperture,
-        shutterspeed_start,
-        shutterspeed_stop
+    shutterspeed_1 = request.args.get("shutterspeed_1")
+    shutterspeed_2 = request.args.get("shutterspeed_2")
+    shutterspeed_3 = request.args.get("shutterspeed_3")
+    update_state("partiality_bracket_iso", iso)
+    update_state("partiality_bracket_aperture", aperture)
+    update_state("partiality_bracket_shutterspeed_1", shutterspeed_1)
+    update_state("partiality_bracket_shutterspeed_2", shutterspeed_2)
+    update_state("partiality_bracket_shutterspeed_3", shutterspeed_3)
+    return "", 202
+
+
+@app.route("/camera/partiality_bracket/start")
+def start_partiality_bracket():
+    command = camera_commands.CaptureBracket(
+        get_state("partiality_bracket_iso"),
+        get_state("partiality_bracket_aperture"),
+        [
+            get_state("partiality_bracket_shutterspeed_1"),
+            get_state("partiality_bracket_shutterspeed_2"),
+            get_state("partiality_bracket_shutterspeed_3"),
+        ],
+        lambda: update_state("partiality_bracket_running", False),
     )
+    update_state("partiality_bracket_running", True)
     command_queue.put(command)
     return "", 202
 
-@app.route("/camera/bracket/start")
-def start_bracket():
-    command_queue.put(camera_commands.StartBracket())
+
+@app.route("/camera/partiality_bracket/stop")
+def stop_partiality_bracket():
+    update_state("stop_bracket", True)
+    update_state("partiality_bracket_running", False)
     return "", 202
 
-@app.route("/camera/bracket/stop")
-def stop_bracket():
-    update_state("bracket_running", False)
+##############################
+# Partiality Intervallometer #
+##############################
+
+
+@app.route("/camera/partiality_intervallometer")
+def partiality_intervallometer():
+    interval = int(request.args.get("interval"))
+    update_state("intervallometer_interval", interval)
     return "", 202
+
+
+@app.route("/camera/partiality_intervallometer/start")
+def start_partiality_intervallometer():
+    start_intervallometer(start_partiality_bracket)
+    update_state("intervallometer_running", True)
+    return "", 202
+
+
+@app.route("/camera/partiality_intervallometer/stop")
+def stop_partiality_intervallometer():
+    update_state("intervallometer_running", False)
+    return "", 202
+
+####################
+# Totality bracket #
+####################
+
+
+@app.route("/camera/totality_bracket/start")
+def start_totality_bracket():
+    command = camera_commands.CaptureBracket(
+        "200",
+        "8",
+        [
+            "1/8000",
+            "1/4000",
+            "1/2000",
+            "1/1000",
+            "1/500",
+            "1/250",
+            "1/100",
+            "1/50",
+            "1/25",
+            "1/10",
+            "1/4",
+            "0.5",
+            "1",
+            "2",
+            "5",
+            "10"
+        ],
+        lambda: update_state("totality_bracket_running", False),
+    )
+    update_state("totality_bracket_running", True)
+    command_queue.put(command)
+    return "", 202
+
+@app.route("/camera/totality_bracket/stop")
+def stop_totality_bracket():
+    update_state("stop_bracket", True)
+    update_state("totality_bracket_running", False)
+    return "", 202
+
+##############
+# UI Locking #
+##############
 
 
 @app.route("/camera/lock_ui")
 def lock_ui():
     command_queue.put(camera_commands.LockUI())
+    return "", 202
+
 
 @app.route("/camera/unlock_ui")
 def unlock_ui():
     command_queue.put(camera_commands.UnlockUI())
+    return "", 202
 
-# @app.route("/camera/capture")
-# def capture():
-#     command_queue.put(CameraCommand.CAPTURE)
-#     return "", 202
-
-# @app.route("/camera/capture_hq_preview")
-# def capture_hq_preview():
-#     command_queue.put(CameraCommand.CAPTURE_SINGLE_HQ_PREVIEW)
-#     return "", 202
-
-
-# @app.route("/camera/totality_image_burst")
-# def totality_image_burst():
-#     command_queue.put(CameraCommand.START_TOTALITY_IMAGE_BURST)
-#     return "", 202
-
-
-# @app.route("/camera/start_intervallometer")
-# def start_intervallometer():
-#     interval_s = int(request.args.get("interval_s"))
-#     command_queue.put(IntervallometerCommand(True, interval_s))
-#     return "", 202
-
-# @app.route("/camera/stop_intervallometer")
-# def stop_intervallometer():
-#     command_queue.put(IntervallometerCommand(False))
-#     return "", 202
-
-
-@app.route("/status")
-def status():
-    response = jsonify(get_state(full=True))
-    return response
+##################
+# Single capture #
+##################
+@app.route("/camera/capture")
+def capture():
+    command_queue.put(camera_commands.Capture())
+    return "", 202
 
 
 if __name__ == "__main__":

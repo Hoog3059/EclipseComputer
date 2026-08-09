@@ -13,13 +13,12 @@ function changeUIMode(mode) {
   uiMode.value = mode;
 }
 
-async function uiLockingCheckboxClicked(event) {
-  var locked = event.srcElement.checked;
-  if (locked) {
-    await fetch(`${api_url}/camera/lock_ui`);
-  } else {
-    await fetch(`${api_url}/camera/unlock_ui`);
-  }  
+async function lockUI() {
+  await fetch(`${api_url}/camera/lock_ui`);
+}
+
+async function unlockUI() {
+  await fetch(`${api_url}/camera/unlock_ui`);
 }
 
 // --- Preview UI ---
@@ -79,8 +78,6 @@ const server_connected = ref(false);
 
 const camera_connected = ref(false);
 
-const uiLocked = ref(false);
-
 const batterylevel = ref("0%");
 
 const iso = ref("0");
@@ -89,15 +86,18 @@ const aperture = ref("0");
 
 const preview_capture = ref(false);
 
-const bracket_running = ref(false);
+const partiality_bracket_running = ref(false);
 
-const bracket_iso = ref("100");
-const bracket_aperture = ref("6.3");
-const bracket_shutterspeed_start = ref("1/60")
-const bracket_shutterspeed_stop = ref("1/20");
+const partiality_bracket_iso = ref("100");
+const partiality_bracket_aperture = ref("6.3");
+const partiality_bracket_shutterspeed_1 = ref("1/1600");
+const partiality_bracket_shutterspeed_2 = ref("1/800");
+const partiality_bracket_shutterspeed_3 = ref("1/400");
 
 const intervallometer_running = ref(false);
 const intervallometer_interval = ref(10);
+
+const totality_bracket_running = ref(false);
 
 async function fetchStatus() {
   try {
@@ -109,8 +109,6 @@ async function fetchStatus() {
     const data = await response.json();
     server_connected.value = true;
 
-    uiLocked.value = data.uiLocked;
-
     camera_connected.value = data.connected;
 
     batterylevel.value = data.batterylevel;
@@ -120,36 +118,64 @@ async function fetchStatus() {
     aperture.value = data.aperture;
 
     preview_capture.value = data.preview_capture;
-    
-    bracket_running.value = data.bracket_running;
 
-    bracket_iso.value = data.bracket_iso;
-    bracket_aperture.value = data.bracket_aperture;
-    bracket_shutterspeed_start.value = data.bracket_shutterspeed_start;
-    bracket_shutterspeed_stop.value = data.bracket_shutterspeed_stop;
+    partiality_bracket_running.value = data.partiality_bracket_running;
+
+    partiality_bracket_iso.value = data.partiality_bracket_iso;
+    partiality_bracket_aperture.value = data.partiality_bracket_aperture;
+    partiality_bracket_shutterspeed_1.value = data.partiality_bracket_shutterspeed_1;
+    partiality_bracket_shutterspeed_2.value = data.partiality_bracket_shutterspeed_2;
+    partiality_bracket_shutterspeed_3.value = data.partiality_bracket_shutterspeed_3;
 
     intervallometer_running.value = data.intervallometer_running;
-    intervallometer_interval.value = data.intervallometer_interval;
+    // It's really annoying if this updates while typing
+    // intervallometer_interval.value = data.intervallometer_interval;
+
+    totality_bracket_running.value = data.totality_bracket_running;
   } catch (error) {
     server_connected.value = false;
     console.error('Error fetching camera status:', error);
   }
 }
+setInterval(fetchStatus, 1000);
 
 async function bracketSettingChanged() {
-  await fetch(`${api_url}/camera/bracket?iso=${bracket_iso.value}&aperture=${bracket_aperture.value}&shutterspeed_start=${bracket_shutterspeed_start.value}&shutterspeed_stop=${bracket_shutterspeed_stop.value}`);
+  await fetch(`${api_url}/camera/partiality_bracket?iso=${partiality_bracket_iso.value}&aperture=${partiality_bracket_aperture.value}&shutterspeed_1=${partiality_bracket_shutterspeed_1.value}&shutterspeed_2=${partiality_bracket_shutterspeed_2.value}&shutterspeed_3=${partiality_bracket_shutterspeed_3.value}`);
 }
 
 async function startBracketCapture() {
   bracketSettingChanged();
-  await fetch(`${api_url}/camera/bracket/start`);  
+  await fetch(`${api_url}/camera/partiality_bracket/start`);
 }
 
 async function stopBracketCapture() {
-  await fetch(`${api_url}/camera/bracket/stop`);  
+  await fetch(`${api_url}/camera/partiality_bracket/stop`);
 }
 
-setInterval(fetchStatus, 1000);
+async function triggerCapture() {
+  await fetch(`${api_url}/camera/capture`);
+}
+
+async function intervallometerSettingChanged() {
+  await fetch(`${api_url}/camera/partiality_intervallometer?interval=${intervallometer_interval.value}`);
+}
+
+async function startIntervallometer() {
+  intervallometerSettingChanged();
+  await fetch(`${api_url}/camera/partiality_intervallometer/start`);
+}
+
+async function stopIntervallometer() {
+  await fetch(`${api_url}/camera/partiality_intervallometer/stop`);
+}
+
+async function startTotalityBracket() {
+  await fetch(`${api_url}/camera/totality_bracket/start`);
+}
+
+async function stopTotalityBracket() {
+  await fetch(`${api_url}/camera/totality_bracket/stop`);
+}
 </script>
 
 <template>
@@ -162,25 +188,28 @@ setInterval(fetchStatus, 1000);
       <div class="header-item">🔋{{ batterylevel }}</div>
       <div class="header-item">{{ base_url }}</div>
       <div class="header-item align-right">
-        <div >
-          <label>Lock UI</label>
-          <input type="checkbox" v-model="uiLocked" @click="uiLockingCheckboxClicked"/>
+        <div>
+          <label>UI</label>
+          <button @click="lockUI()">Lock</button>
+          <button @click="unlockUI()">Unlock</button>
         </div>
       </div>
     </header>
     <nav>
       <button :class="{ active: uiMode === 'bracket' }" @click="changeUIMode('bracket')">Bracket</button>
       <button :class="{ active: uiMode === 'preview' }" @click="changeUIMode('preview')">Preview</button>
+      <button :class="{ active: uiMode === 'last' }" @click="changeUIMode('last')">Last</button>
     </nav>
 
     <!-- Bracket mode -->
     <main v-show="uiMode === 'bracket'">
       <section class="vertical-gaps">
-        <h1>Current Bracket</h1>
+        <h1>Partiality</h1>
         <div class="row space-around">
           <div class="labelled-dropdown-box">
             <label>ISO</label>
-            <select :disabled="bracket_running" v-model="bracket_iso" @change="bracketSettingChanged">
+            <select :disabled="partiality_bracket_running" v-model="partiality_bracket_iso"
+              @change="bracketSettingChanged">
               <option value="Auto">Auto</option>
               <option value="100">100</option>
               <option value="200">200</option>
@@ -193,7 +222,8 @@ setInterval(fetchStatus, 1000);
           </div>
           <div class="labelled-dropdown-box">
             <label>Aperture</label>
-            <select :disabled="bracket_running" v-model="bracket_aperture" @change="bracketSettingChanged">
+            <select :disabled="partiality_bracket_running" v-model="partiality_bracket_aperture"
+              @change="bracketSettingChanged">
               <option value="6.3">6.3</option>
               <option value="7.1">7.1</option>
               <option value="8">8</option>
@@ -214,137 +244,200 @@ setInterval(fetchStatus, 1000);
             </select>
           </div>
         </div>
+        <div class="row space-around labelled-dropdown-box">
+          <label>Shutterspeeds</label>
+        </div>
+        <div class="row space-around labelled-dropdown-box">
+          <select :disabled="partiality_bracket_running" v-model="partiality_bracket_shutterspeed_1" @change="bracketSettingChanged">
+            <option value="30">30</option>
+            <option value="25">25</option>
+            <option value="20">20</option>
+            <option value="15">15</option>
+            <option value="13">13</option>
+            <option value="10.3">10.3</option>
+            <option value="8">8</option>
+            <option value="6.3">6.3</option>
+            <option value="5">5</option>
+            <option value="4">4</option>
+            <option value="3.2">3.2</option>
+            <option value="2.5">2.5</option>
+            <option value="2">2</option>
+            <option value="1.6">1.6</option>
+            <option value="1.3">1.3</option>
+            <option value="1">1</option>
+            <option value="0.8">0.8</option>
+            <option value="0.6">0.6</option>
+            <option value="0.5">0.5</option>
+            <option value="0.4">0.4</option>
+            <option value="0.3">0.3</option>
+            <option value="1/4">1/4</option>
+            <option value="1/5">1/5</option>
+            <option value="1/6">1/6</option>
+            <option value="1/8">1/8</option>
+            <option value="1/10">1/10</option>
+            <option value="1/13">1/13</option>
+            <option value="1/15">1/15</option>
+            <option value="1/20">1/20</option>
+            <option value="1/25">1/25</option>
+            <option value="1/30">1/30</option>
+            <option value="1/40">1/40</option>
+            <option value="1/50">1/50</option>
+            <option value="1/60">1/60</option>
+            <option value="1/80">1/80</option>
+            <option value="1/100">1/100</option>
+            <option value="1/125">1/125</option>
+            <option value="1/160">1/160</option>
+            <option value="1/200">1/200</option>
+            <option value="1/250">1/250</option>
+            <option value="1/320">1/320</option>
+            <option value="1/400">1/400</option>
+            <option value="1/500">1/500</option>
+            <option value="1/640">1/640</option>
+            <option value="1/800">1/800</option>
+            <option value="1/1000">1/1000</option>
+            <option value="1/1250">1/1250</option>
+            <option value="1/1600">1/1600</option>
+            <option value="1/2000">1/2000</option>
+            <option value="1/2500">1/2500</option>
+            <option value="1/3200">1/3200</option>
+            <option value="1/4000">1/4000</option>
+          </select>
+          <select :disabled="partiality_bracket_running" v-model="partiality_bracket_shutterspeed_2" @change="bracketSettingChanged">
+            <option value="30">30</option>
+            <option value="25">25</option>
+            <option value="20">20</option>
+            <option value="15">15</option>
+            <option value="13">13</option>
+            <option value="10.3">10.3</option>
+            <option value="8">8</option>
+            <option value="6.3">6.3</option>
+            <option value="5">5</option>
+            <option value="4">4</option>
+            <option value="3.2">3.2</option>
+            <option value="2.5">2.5</option>
+            <option value="2">2</option>
+            <option value="1.6">1.6</option>
+            <option value="1.3">1.3</option>
+            <option value="1">1</option>
+            <option value="0.8">0.8</option>
+            <option value="0.6">0.6</option>
+            <option value="0.5">0.5</option>
+            <option value="0.4">0.4</option>
+            <option value="0.3">0.3</option>
+            <option value="1/4">1/4</option>
+            <option value="1/5">1/5</option>
+            <option value="1/6">1/6</option>
+            <option value="1/8">1/8</option>
+            <option value="1/10">1/10</option>
+            <option value="1/13">1/13</option>
+            <option value="1/15">1/15</option>
+            <option value="1/20">1/20</option>
+            <option value="1/25">1/25</option>
+            <option value="1/30">1/30</option>
+            <option value="1/40">1/40</option>
+            <option value="1/50">1/50</option>
+            <option value="1/60">1/60</option>
+            <option value="1/80">1/80</option>
+            <option value="1/100">1/100</option>
+            <option value="1/125">1/125</option>
+            <option value="1/160">1/160</option>
+            <option value="1/200">1/200</option>
+            <option value="1/250">1/250</option>
+            <option value="1/320">1/320</option>
+            <option value="1/400">1/400</option>
+            <option value="1/500">1/500</option>
+            <option value="1/640">1/640</option>
+            <option value="1/800">1/800</option>
+            <option value="1/1000">1/1000</option>
+            <option value="1/1250">1/1250</option>
+            <option value="1/1600">1/1600</option>
+            <option value="1/2000">1/2000</option>
+            <option value="1/2500">1/2500</option>
+            <option value="1/3200">1/3200</option>
+            <option value="1/4000">1/4000</option>
+          </select>
+          <select :disabled="partiality_bracket_running" v-model="partiality_bracket_shutterspeed_3" @change="bracketSettingChanged">
+            <option value="30">30</option>
+            <option value="25">25</option>
+            <option value="20">20</option>
+            <option value="15">15</option>
+            <option value="13">13</option>
+            <option value="10.3">10.3</option>
+            <option value="8">8</option>
+            <option value="6.3">6.3</option>
+            <option value="5">5</option>
+            <option value="4">4</option>
+            <option value="3.2">3.2</option>
+            <option value="2.5">2.5</option>
+            <option value="2">2</option>
+            <option value="1.6">1.6</option>
+            <option value="1.3">1.3</option>
+            <option value="1">1</option>
+            <option value="0.8">0.8</option>
+            <option value="0.6">0.6</option>
+            <option value="0.5">0.5</option>
+            <option value="0.4">0.4</option>
+            <option value="0.3">0.3</option>
+            <option value="1/4">1/4</option>
+            <option value="1/5">1/5</option>
+            <option value="1/6">1/6</option>
+            <option value="1/8">1/8</option>
+            <option value="1/10">1/10</option>
+            <option value="1/13">1/13</option>
+            <option value="1/15">1/15</option>
+            <option value="1/20">1/20</option>
+            <option value="1/25">1/25</option>
+            <option value="1/30">1/30</option>
+            <option value="1/40">1/40</option>
+            <option value="1/50">1/50</option>
+            <option value="1/60">1/60</option>
+            <option value="1/80">1/80</option>
+            <option value="1/100">1/100</option>
+            <option value="1/125">1/125</option>
+            <option value="1/160">1/160</option>
+            <option value="1/200">1/200</option>
+            <option value="1/250">1/250</option>
+            <option value="1/320">1/320</option>
+            <option value="1/400">1/400</option>
+            <option value="1/500">1/500</option>
+            <option value="1/640">1/640</option>
+            <option value="1/800">1/800</option>
+            <option value="1/1000">1/1000</option>
+            <option value="1/1250">1/1250</option>
+            <option value="1/1600">1/1600</option>
+            <option value="1/2000">1/2000</option>
+            <option value="1/2500">1/2500</option>
+            <option value="1/3200">1/3200</option>
+            <option value="1/4000">1/4000</option>
+          </select>
+        </div>
+        <div class="row">
+          <button class="big-action-button" v-if="!partiality_bracket_running" @click="startBracketCapture()">Capture
+            bracket</button>
+          <button class="big-action-button active" v-if="partiality_bracket_running" @click="stopBracketCapture()">Stop
+            bracket</button>
+        </div>
+        <p></p>
         <div class="row space-around">
-          <div class="labelled-dropdown-box">
-            <label>Shutterspeed start</label>
-            <select :disabled="bracket_running" v-model="bracket_shutterspeed_start" @change="bracketSettingChanged">
-              <option value="30">30</option>
-              <option value="25">25</option>
-              <option value="20">20</option>
-              <option value="15">15</option>
-              <option value="13">13</option>
-              <option value="10.3">10.3</option>
-              <option value="8">8</option>
-              <option value="6.3">6.3</option>
-              <option value="5">5</option>
-              <option value="4">4</option>
-              <option value="3.2">3.2</option>
-              <option value="2.5">2.5</option>
-              <option value="2">2</option>
-              <option value="1.6">1.6</option>
-              <option value="1.3">1.3</option>
-              <option value="1">1</option>
-              <option value="0.8">0.8</option>
-              <option value="0.6">0.6</option>
-              <option value="0.5">0.5</option>
-              <option value="0.4">0.4</option>
-              <option value="0.3">0.3</option>
-              <option value="1/4">1/4</option>
-              <option value="1/5">1/5</option>
-              <option value="1/6">1/6</option>
-              <option value="1/8">1/8</option>
-              <option value="1/10">1/10</option>
-              <option value="1/13">1/13</option>
-              <option value="1/15">1/15</option>
-              <option value="1/20">1/20</option>
-              <option value="1/25">1/25</option>
-              <option value="1/30">1/30</option>
-              <option value="1/40">1/40</option>
-              <option value="1/50">1/50</option>
-              <option value="1/60">1/60</option>
-              <option value="1/80">1/80</option>
-              <option value="1/100">1/100</option>
-              <option value="1/125">1/125</option>
-              <option value="1/160">1/160</option>
-              <option value="1/200">1/200</option>
-              <option value="1/250">1/250</option>
-              <option value="1/320">1/320</option>
-              <option value="1/400">1/400</option>
-              <option value="1/500">1/500</option>
-              <option value="1/640">1/640</option>
-              <option value="1/800">1/800</option>
-              <option value="1/1000">1/1000</option>
-              <option value="1/1250">1/1250</option>
-              <option value="1/1600">1/1600</option>
-              <option value="1/2000">1/2000</option>
-              <option value="1/2500">1/2500</option>
-              <option value="1/3200">1/3200</option>
-              <option value="1/4000">1/4000</option>
-            </select>
-            <label>and stop</label>
-            <select :disabled="bracket_running" v-model="bracket_shutterspeed_stop" @change="bracketSettingChanged">
-              <option value="30">30</option>
-              <option value="25">25</option>
-              <option value="20">20</option>
-              <option value="15">15</option>
-              <option value="13">13</option>
-              <option value="10.3">10.3</option>
-              <option value="8">8</option>
-              <option value="6.3">6.3</option>
-              <option value="5">5</option>
-              <option value="4">4</option>
-              <option value="3.2">3.2</option>
-              <option value="2.5">2.5</option>
-              <option value="2">2</option>
-              <option value="1.6">1.6</option>
-              <option value="1.3">1.3</option>
-              <option value="1">1</option>
-              <option value="0.8">0.8</option>
-              <option value="0.6">0.6</option>
-              <option value="0.5">0.5</option>
-              <option value="0.4">0.4</option>
-              <option value="0.3">0.3</option>
-              <option value="1/4">1/4</option>
-              <option value="1/5">1/5</option>
-              <option value="1/6">1/6</option>
-              <option value="1/8">1/8</option>
-              <option value="1/10">1/10</option>
-              <option value="1/13">1/13</option>
-              <option value="1/15">1/15</option>
-              <option value="1/20">1/20</option>
-              <option value="1/25">1/25</option>
-              <option value="1/30">1/30</option>
-              <option value="1/40">1/40</option>
-              <option value="1/50">1/50</option>
-              <option value="1/60">1/60</option>
-              <option value="1/80">1/80</option>
-              <option value="1/100">1/100</option>
-              <option value="1/125">1/125</option>
-              <option value="1/160">1/160</option>
-              <option value="1/200">1/200</option>
-              <option value="1/250">1/250</option>
-              <option value="1/320">1/320</option>
-              <option value="1/400">1/400</option>
-              <option value="1/500">1/500</option>
-              <option value="1/640">1/640</option>
-              <option value="1/800">1/800</option>
-              <option value="1/1000">1/1000</option>
-              <option value="1/1250">1/1250</option>
-              <option value="1/1600">1/1600</option>
-              <option value="1/2000">1/2000</option>
-              <option value="1/2500">1/2500</option>
-              <option value="1/3200">1/3200</option>
-              <option value="1/4000">1/4000</option>
-            </select>
+          <div class="labelled-textbox">
+            <label>Interval</label>
+            <input type="number" v-model="intervallometer_interval" @change="intervallometerSettingChanged" />
           </div>
         </div>
         <div class="row">
-          <button class="big-action-button" v-if="!bracket_running" @click="startBracketCapture()">Capture bracket</button>
-          <button class="big-action-button active" v-if="bracket_running" @click="stopBracketCapture()">Stop bracket</button>
+          <button class="big-action-button" v-if="!intervallometer_running" @click="startIntervallometer">Start</button>
+          <button class="big-action-button active" v-if="intervallometer_running"
+            @click="stopIntervallometer">Stop</button>
         </div>
       </section>
 
       <section class="vertical-gaps">
-        <h1>Intervallometer</h1>
-        <div class="row space-around">
-          <div class="labelled-textbox">
-            <label>Interval</label>
-            <input type="number" v-model="intervallometer_interval"/>
-          </div>
-        </div>
+        <h1>Totality</h1>
         <div class="row">
-          <button class="big-action-button" v-if="!intervallometer_running">Start</button>
-          <button class="big-action-button active" v-if="intervallometer_running">Stop</button>
+          <button class="big-action-button" v-if="!totality_bracket_running" @click="startTotalityBracket">Start
+            Totality</button>
+          <button class="big-action-button active" v-if="totality_bracket_running" @click="stopTotalityBracket">Stop
+            Totality</button>
         </div>
       </section>
 
@@ -353,7 +446,7 @@ setInterval(fetchStatus, 1000);
     <!-- Preview mode -->
     <main v-show="uiMode === 'preview'">
       <section id="preview-viewport">
-        <img id="preview-content" :src="'http://' + base_url + ':5000/preview_feed'" />
+        <img id="preview-content" :src="api_url + '/preview_feed'" />
       </section>
       <div class="focus-button-container">
         <button :disabled="!focus_enabled" class="focus-button"
@@ -476,6 +569,19 @@ setInterval(fetchStatus, 1000);
             </select>
           </div>
         </div>
+        <div class="row space-around" style="margin-top: 10px;">
+          <button class="big-action-button" @click="triggerCapture">Capture</button>
+        </div>
+      </section>
+    </main>
+
+    <!-- Last capture mode -->
+    <main v-show="uiMode === 'last'">
+      <section id="last-capture-viewport">
+        <img id="last-capture-content" :src="api_url + '/preview_feed'" />
+      </section>
+      <section id="retrieve-button-container" class="row">
+        <button class="big-action-button">Refresh</button>
       </section>
     </main>
   </div>
@@ -714,9 +820,33 @@ nav button:active {
 <!-- Preview settings -->
 <style scoped>
 #preview-settings-container {
-  height: 150px;
+  height: 200px;
   padding-top: 10px;
   padding-bottom: 10px;
-  flex: 0 0 150px;
+  flex: 0 0 200px;
+  display: flex;
+  flex-direction: column;
+  row-gap: 5px;
+}
+</style>
+
+<style scoped>
+#last-capture-viewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  cursor: grab;
+}
+
+#retrieve-button-container {
+  height: 50px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  flex: 0 0 50px;
 }
 </style>
