@@ -68,8 +68,8 @@ class BracketCaptureExposure():
         self.shutterspeed_current = shutterspeed_current
         self.shutterspeed_stop = shutterspeed_stop
 
-class TurnOffUI():
+class LockUI():
     pass
 
-class TurnOnUI():
+class UnlockUI():
     pass

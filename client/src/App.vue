@@ -1,13 +1,25 @@
 <script setup>
 import { onMounted, ref } from "vue";
 import WZoom from "vanilla-js-wheel-zoom";
-const base_url = import.meta.env.VITE_SERVER_BASE;
+const protocol = import.meta.env.VITE_SERVER_PROTOCOL;
+const host = import.meta.env.VITE_SERVER_HOST;
+const port = import.meta.env.VITE_SERVER_PORT;
+const api_url = `${protocol}://${host}:${port}`
 
 // --- UI Switching ---
 const uiMode = ref('bracket');
 
 function changeUIMode(mode) {
   uiMode.value = mode;
+}
+
+async function uiLockingCheckboxClicked(event) {
+  var locked = event.srcElement.checked;
+  if (locked) {
+    await fetch(`${api_url}/camera/lock_ui`);
+  } else {
+    await fetch(`${api_url}/camera/unlock_ui`);
+  }  
 }
 
 // --- Preview UI ---
@@ -34,15 +46,15 @@ onMounted(() => {
 
 async function previewCheckboxChanged(event) {
   if (event.srcElement.checked) {
-    await fetch(`http://${base_url}:5000/camera/start_preview`);
+    await fetch(`${api_url}/camera/start_preview`);
   } else {
-    await fetch(`http://${base_url}:5000/camera/stop_preview`);
+    await fetch(`${api_url}/camera/stop_preview`);
   }
 }
 
 async function settingChanged(event, setting) {
   try {
-    const response = await fetch(`http://${base_url}:5000/camera/set_property/${setting}?value=${event.target.value}`, {
+    const response = await fetch(`${api_url}/camera/set_property/${setting}?value=${event.target.value}`, {
       method: 'GET',
     });
     if (!response.ok) {
@@ -59,13 +71,15 @@ async function settingChanged(event, setting) {
 const focus_enabled = ref(false);
 
 async function sendFocusCommand(command) {
-  await fetch(`http://${base_url}:5000/camera/manualfocus/${command}`);
+  await fetch(`${api_url}/camera/manualfocus/${command}`);
 }
 
 // --- Camera status ---
 const server_connected = ref(false);
 
 const camera_connected = ref(false);
+
+const uiLocked = ref(false);
 
 const batterylevel = ref("0%");
 
@@ -87,13 +101,15 @@ const intervallometer_interval = ref(10);
 
 async function fetchStatus() {
   try {
-    const response = await fetch(`http://${base_url}:5000/status`);
+    const response = await fetch(`${api_url}/status`);
     if (!response.ok) {
       server_connected.value = false;
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const data = await response.json();
     server_connected.value = true;
+
+    uiLocked.value = data.uiLocked;
 
     camera_connected.value = data.connected;
 
@@ -121,16 +137,16 @@ async function fetchStatus() {
 }
 
 async function bracketSettingChanged() {
-  await fetch(`http://${base_url}:5000/camera/bracket?iso=${bracket_iso.value}&aperture=${bracket_aperture.value}&shutterspeed_start=${bracket_shutterspeed_start.value}&shutterspeed_stop=${bracket_shutterspeed_stop.value}`);
+  await fetch(`${api_url}/camera/bracket?iso=${bracket_iso.value}&aperture=${bracket_aperture.value}&shutterspeed_start=${bracket_shutterspeed_start.value}&shutterspeed_stop=${bracket_shutterspeed_stop.value}`);
 }
 
 async function startBracketCapture() {
   bracketSettingChanged();
-  await fetch(`http://${base_url}:5000/camera/bracket/start`);  
+  await fetch(`${api_url}/camera/bracket/start`);  
 }
 
 async function stopBracketCapture() {
-  await fetch(`http://${base_url}:5000/camera/bracket/stop`);  
+  await fetch(`${api_url}/camera/bracket/stop`);  
 }
 
 setInterval(fetchStatus, 1000);
@@ -145,6 +161,12 @@ setInterval(fetchStatus, 1000);
       <div class="header-item" v-if="!camera_connected">📷❌</div>
       <div class="header-item">🔋{{ batterylevel }}</div>
       <div class="header-item">{{ base_url }}</div>
+      <div class="header-item align-right">
+        <div >
+          <label>Lock UI</label>
+          <input type="checkbox" v-model="uiLocked" @click="uiLockingCheckboxClicked"/>
+        </div>
+      </div>
     </header>
     <nav>
       <button :class="{ active: uiMode === 'bracket' }" @click="changeUIMode('bracket')">Bracket</button>
@@ -588,6 +610,10 @@ header {
 
 .header-item {
   height: 100%;
+}
+
+.header-item.align-right {
+  margin-left: auto;
 }
 </style>
 

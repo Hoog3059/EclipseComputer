@@ -55,6 +55,7 @@ camera_state_lock = threading.Lock()
 camera_state = {
     # Camera info
     "connected": False,
+    "uiLocked": False,
 
     "batterylevel": "0%",
 
@@ -171,9 +172,9 @@ def camera_worker():
                 _stop_preview(camera, widget)
             case camera_commands.ManualFocus():
                 _manual_focus_drive(camera, widget, command)
-            case camera_commands.TurnOnUI():
+            case camera_commands.UnlockUI():
                 _set_property(camera, widget, "uilock", 0)
-            case camera_commands.TurnOffUI():
+            case camera_commands.LockUI():
                 _set_property(camera, widget, "uilock", 1)
             case camera_commands.PushBracketSettings():
                 update_state("bracket_iso", command.iso)

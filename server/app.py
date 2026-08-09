@@ -102,6 +102,14 @@ def stop_bracket():
     return "", 202
 
 
+@app.route("/camera/lock_ui")
+def lock_ui():
+    command_queue.put(camera_commands.LockUI())
+
+@app.route("/camera/unlock_ui")
+def unlock_ui():
+    command_queue.put(camera_commands.UnlockUI())
+
 # @app.route("/camera/capture")
 # def capture():
 #     command_queue.put(CameraCommand.CAPTURE)
