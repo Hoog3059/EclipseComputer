@@ -5,9 +5,13 @@ from flask import Flask, Response, jsonify, render_template_string, request, mak
 import gphoto2 as gp
 from flask_cors import CORS, cross_origin
 import subprocess
+import logging
 
 from camera_worker import camera_worker, preview_frame_queue, command_queue, get_state, update_state, start_intervallometer
 import camera_commands
+
+log = logging.getLogger("werkzeug")
+log.setLevel(logging.ERROR)
 
 app = Flask(__name__)
 cors = CORS(app)
@@ -16,6 +20,7 @@ app.config['CORS_HEADERS'] = 'Content-Type'
 @app.route("/computer/shutdown")
 def shutdown():
     subprocess.Popen(['shutdown','-h','now'])
+
 
 #################
 # System status #
