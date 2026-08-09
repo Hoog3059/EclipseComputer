@@ -22,43 +22,45 @@ async function unlockUI() {
 }
 
 // --- Preview UI ---
-onMounted(() => {
-  var frame = document.getElementById('preview-viewport');
-  var wzoom = WZoom.create('#preview-content', {
-    type: 'image',
-    maxScale: 10,
-    minScale: 1,
-    alignContent: "center",
-    onGrab: function () {
-      frame.style.cursor = 'grabbing';
-    },
-    onDrop: function () {
-      frame.style.cursor = 'grab';
-    }
-  });
+// onMounted(() => {
+//   var frame = document.getElementById('preview-viewport');
+//   var wzoom = WZoom.create('#preview-content', {
+//     type: 'html',
+//     maxScale: 10,
+//     minScale: 1,
+//     alignContent: "center",
+//     width: 1056,
+//     height: 706,
+//     onGrab: function () {
+//       frame.style.cursor = 'grabbing';
+//     },
+//     onDrop: function () {
+//       frame.style.cursor = 'grab';
+//     }
+//   });
 
-  window.addEventListener("resize", function () {
-    wzoom.prepare();
-  });
+//   window.addEventListener("resize", function () {
+//     wzoom.prepare();
+//   });
 
-  var frame2 = document.getElementById('last-capture-viewport');
-  var wzoom2 = WZoom.create('#last-capture-content', {
-    type: 'image',
-    maxScale: 10,
-    minScale: 1,
-    alignContent: "center",
-    onGrab: function () {
-      frame2.style.cursor = 'grabbing';
-    },
-    onDrop: function () {
-      frame2.style.cursor = 'grab';
-    }
-  });
+//   var frame2 = document.getElementById('last-capture-viewport');
+//   var wzoom2 = WZoom.create('#last-capture-content', {
+//     type: 'image',
+//     maxScale: 10,
+//     minScale: 1,
+//     alignContent: "center",
+//     onGrab: function () {
+//       frame2.style.cursor = 'grabbing';
+//     },
+//     onDrop: function () {
+//       frame2.style.cursor = 'grab';
+//     }
+//   });
 
-  window.addEventListener("resize", function () {
-    wzoom2.prepare();
-  });
-});
+//   window.addEventListener("resize", function () {
+//     wzoom2.prepare();
+//   });
+// });
 
 
 async function previewCheckboxChanged(event) {
@@ -470,7 +472,7 @@ function refreshLastCapture() {
     <!-- Preview mode -->
     <main v-show="uiMode === 'preview'">
       <section id="preview-viewport">
-        <img id="preview-content" :src="api_url + '/preview_feed'" />
+        <img id="preview-content" :src="api_url + '/preview_feed'" width="1056" height="704"/>
       </section>
       <div class="focus-button-container">
         <button :disabled="!focus_enabled" class="focus-button"
@@ -793,6 +795,12 @@ nav button:active {
 
   cursor: grab;
 }
+
+#preview-content {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
 </style>
 
 <!-- Focus buttons -->
@@ -862,7 +870,9 @@ nav button:active {
 }
 
 #last-capture-content {
-  width: 100vw;
+  height: 100%;
+  width: 100%;
+  object-fit: contain;
 }
 
 #retrieve-button-container {
