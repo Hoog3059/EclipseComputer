@@ -44,7 +44,7 @@ class IntervallometerCommand():
 
         self.interval_s = interval_s
 
-class CaptureBracketCommand():
+class PushBracketSettings():
     __match_args__ = ("iso", "aperture", "start_shutterspeed", "stop_shutterspeed")
 
     def __init__(self, iso, aperture, start_shutterspeed, stop_shutterspeed):
@@ -57,6 +57,14 @@ class CaptureBracketCommand():
         self.aperture = aperture
         self.start_shutterspeed = start_shutterspeed
         self.stop_shutterspeed = stop_shutterspeed
+
+class StartBracket():
+    pass
+
+class BracketCaptureExposure():
+    def __init__(self, shutterspeed_current, shutterspeed_stop):
+        self.shutterspeed_current = shutterspeed_current
+        self.shutterspeed_stop = shutterspeed_stop
 
 class TurnOffUI():
     pass

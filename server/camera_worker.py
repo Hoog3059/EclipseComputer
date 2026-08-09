@@ -10,14 +10,6 @@ import camera_commands
 from camera_commands import SetPropertyCommand
 
 
-
-
-
-
-
-
-
-
 # class CameraCommand(IntEnum):
 #     STOP_VIEWFINDER = 10
 #     START_VIEWFINDER = 11
@@ -61,19 +53,29 @@ preview_frame_queue = queue.Queue(maxsize=10)
 
 camera_state_lock = threading.Lock()
 camera_state = {
+    # Camera info
     "connected": False,
-
-    "intervallometer_active": False,
-    "totality_burst_active": False,
-
-    "viewfinder": False,
-    "preview_capture": False,
 
     "batterylevel": "0%",
 
-    "iso": "0",
-    "shutterspeed": "0",
-    "aperture": "0",
+    "iso": "100",
+    "shutterspeed": "1/1000",
+    "aperture": "6.3",
+
+    # Preview info
+    "preview_capture": False,
+
+    # Bracket
+    "bracket_running": False,
+
+    "bracket_iso": "100",
+    "bracket_aperture": "6.3",
+    "bracket_shutterspeed_start": "1/1000",
+    "bracket_shutterspeed_stop": "1/10",
+
+    # Intervallometer
+    "intervallometer_running": False,
+    "intervallometer_interval": 10,
 }
 
 current_bracket = None
@@ -116,14 +118,15 @@ def camera_worker():
                 print("Camera initialized successfully.")
                 update_state("connected", True)
 
-                command_queue.put(SetPropertyCommand("imageformat", "RAW + L"))
-                command_queue.put(SetPropertyCommand(
-                    "imageformatsd", "RAW + L"))
-                command_queue.put(SetPropertyCommand(
-                    "capturetarget", "Memory card"))
-
-                # command_queue.put(CameraCommand.START_VIEWFINDER)
-                # command_queue.put(CameraCommand.START_PREVIEW)
+                command_queue.put(
+                    SetPropertyCommand("imageformat", "RAW + L")
+                )
+                command_queue.put(
+                    SetPropertyCommand("imageformatsd", "RAW + L")
+                )
+                command_queue.put(
+                    SetPropertyCommand("capturetarget", "Memory card")
+                )
             elif error != GP_ERROR.MODEL_NOT_FOUND:
                 # Unhandled error
                 raise gp.GPhoto2Error(error)
@@ -172,6 +175,20 @@ def camera_worker():
                 _set_property(camera, widget, "uilock", 0)
             case camera_commands.TurnOffUI():
                 _set_property(camera, widget, "uilock", 1)
+            case camera_commands.PushBracketSettings():
+                update_state("bracket_iso", command.iso)
+                update_state("bracket_aperture", command.aperture)
+                update_state("bracket_shutterspeed_start",
+                             command.start_shutterspeed)
+                update_state("bracket_shutterspeed_stop",
+                             command.stop_shutterspeed)
+            case camera_commands.StartBracket():
+                update_state("bracket_running", True)
+                command_queue.put(camera_commands.BracketCaptureExposure(get_state(
+                    "bracket_shutterspeed_start"), get_state("bracket_shutterspeed_stop")))
+            case camera_commands.BracketCaptureExposure():
+                _bracket_capture_exposure(camera, widget, command)
+
             # case CameraCommand.CAPTURE:
             #     _capture(camera, widget)
             # case CameraCommand.CAPTURE_SINGLE_HQ_PREVIEW:
@@ -199,6 +216,29 @@ def camera_worker():
                 _capture(camera, widget)
                 # _wait_for_idle(camera)
                 _wait_for_capture_finish(camera)
+
+
+def _bracket_capture_exposure(camera, widget, command: camera_commands.BracketCaptureExposure):
+    if not get_state("bracket_running"):
+        return
+
+    _set_property(camera, widget, "iso", get_state("bracket_iso"))
+    _set_property(camera, widget, "aperture", get_state("bracket_aperture"))
+    _set_property(camera, widget, "shutterspeed", command.shutterspeed_current)
+    _capture(camera, widget)
+    _wait_for_capture_finish(camera, total_timeout_ms=int(eval(command.shutterspeed_current)*1000 + 1000))
+
+    if command.shutterspeed_current == command.shutterspeed_stop:
+        return
+
+    if available_shutterspeeds.index(command.shutterspeed_stop) < available_shutterspeeds.index(command.shutterspeed_current):
+        index_step = -1
+    else:
+        index_step = 1
+
+    next_shutterspeed = available_shutterspeeds[available_shutterspeeds.index(command.shutterspeed_current) + index_step]
+    command_queue.put(camera_commands.BracketCaptureExposure(
+        next_shutterspeed, command.shutterspeed_stop))
 
 
 def _start_stop_intervallometer(start_stop, interval_s):
@@ -288,7 +328,6 @@ def _capture(camera, widget):
     camera.set_config(widget)
     widget.get_child_by_name("eosremoterelease").set_value("Release")
     camera.set_config(widget)
-    print("halleluya")
 
 
 def _set_property(camera, widget, property_name, value):
@@ -298,7 +337,9 @@ def _set_property(camera, widget, property_name, value):
     widget.get_child_by_name(property_name).set_value(value)
     camera.set_config(widget)
 
-#region Preview
+# region Preview
+
+
 def _start_preview(camera, widget):
     update_state("preview_capture", True)
     command_queue.put(camera_commands.CapturePreview())
@@ -332,7 +373,8 @@ def _stop_preview(camera, widget):
     camera.set_config(widget)
     widget.get_child_by_name("viewfinder").set_value(0)
     camera.set_config(widget)
-#endregion
+# endregion
+
 
 def _manual_focus_drive(camera, widget, command: camera_commands.ManualFocus):
     widget.get_child_by_name("manualfocusdrive").set_value(command.focus.value)

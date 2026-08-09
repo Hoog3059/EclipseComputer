@@ -64,16 +64,26 @@ async function sendFocusCommand(command) {
 
 // --- Camera status ---
 const server_connected = ref(false);
-const camera_connected = ref(false);
 
-const viewfinder = ref(false);
-const preview_capture = ref(false);
+const camera_connected = ref(false);
 
 const batterylevel = ref("0%");
 
 const iso = ref("0");
 const shutterspeed = ref("0");
 const aperture = ref("0");
+
+const preview_capture = ref(false);
+
+const bracket_running = ref(false);
+
+const bracket_iso = ref("100");
+const bracket_aperture = ref("6.3");
+const bracket_shutterspeed_start = ref("1/1000");
+const bracket_shutterspeed_stop = ref("1/60");
+
+const intervallometer_running = ref(false);
+const intervallometer_interval = ref(10);
 
 async function fetchStatus() {
   try {
@@ -84,17 +94,43 @@ async function fetchStatus() {
     }
     const data = await response.json();
     server_connected.value = true;
+
     camera_connected.value = data.connected;
-    viewfinder.value = data.viewfinder;
-    preview_capture.value = data.preview_capture;
+
     batterylevel.value = data.batterylevel;
+
     iso.value = data.iso;
     shutterspeed.value = data.shutterspeed;
     aperture.value = data.aperture;
+
+    preview_capture.value = data.preview_capture;
+    
+    bracket_running.value = data.bracket_running;
+
+    bracket_iso.value = data.bracket_iso;
+    bracket_aperture.value = data.bracket_aperture;
+    bracket_shutterspeed_start.value = data.bracket_shutterspeed_start;
+    bracket_shutterspeed_stop.value = data.bracket_shutterspeed_stop;
+
+    intervallometer_running.value = data.intervallometer_running;
+    intervallometer_interval.value = data.intervallometer_interval;
   } catch (error) {
     server_connected.value = false;
     console.error('Error fetching camera status:', error);
   }
+}
+
+async function bracketSettingChanged() {
+  await fetch(`http://${base_url}:5000/camera/bracket?iso=${bracket_iso.value}&aperture=${bracket_aperture.value}&shutterspeed_start=${bracket_shutterspeed_start.value}&shutterspeed_stop=${bracket_shutterspeed_stop.value}`);
+}
+
+async function startBracketCapture() {
+  bracketSettingChanged();
+  await fetch(`http://${base_url}:5000/camera/bracket/start`);  
+}
+
+async function stopBracketCapture() {
+  await fetch(`http://${base_url}:5000/camera/bracket/stop`);  
 }
 
 setInterval(fetchStatus, 1000);
@@ -122,7 +158,7 @@ setInterval(fetchStatus, 1000);
         <div class="row space-around">
           <div class="labelled-dropdown-box">
             <label>ISO</label>
-            <select v-model="bracket_iso">
+            <select v-model="bracket_iso" @change="bracketSettingChanged">
               <option value="Auto">Auto</option>
               <option value="100">100</option>
               <option value="200">200</option>
@@ -135,7 +171,7 @@ setInterval(fetchStatus, 1000);
           </div>
           <div class="labelled-dropdown-box">
             <label>Aperture</label>
-            <select v-model="bracket_aperture">
+            <select v-model="bracket_aperture" @change="bracketSettingChanged">
               <option value="6.3">6.3</option>
               <option value="7.1">7.1</option>
               <option value="8">8</option>
@@ -159,7 +195,7 @@ setInterval(fetchStatus, 1000);
         <div class="row space-around">
           <div class="labelled-dropdown-box">
             <label>Shutterspeed start</label>
-            <select v-model="bracket_shutterspeed_start">
+            <select v-model="bracket_shutterspeed_start" @change="bracketSettingChanged">
               <option value="30">30</option>
               <option value="25">25</option>
               <option value="20">20</option>
@@ -213,8 +249,8 @@ setInterval(fetchStatus, 1000);
               <option value="1/3200">1/3200</option>
               <option value="1/4000">1/4000</option>
             </select>
-            <label>and end</label>
-            <select v-model="bracket_shutterspeed_end">
+            <label>and stop</label>
+            <select v-model="bracket_shutterspeed_stop" @change="bracketSettingChanged">
               <option value="30">30</option>
               <option value="25">25</option>
               <option value="20">20</option>
@@ -271,7 +307,8 @@ setInterval(fetchStatus, 1000);
           </div>
         </div>
         <div class="row">
-          <button class="big-action-button">Capture now</button>
+          <button class="big-action-button" v-if="!bracket_running" @click="startBracketCapture()">Capture bracket</button>
+          <button class="big-action-button active" v-if="bracket_running" @click="stopBracketCapture()">Stop bracket</button>
         </div>
       </section>
 
@@ -280,11 +317,12 @@ setInterval(fetchStatus, 1000);
         <div class="row space-around">
           <div class="labelled-textbox">
             <label>Interval</label>
-            <input type="number" />
+            <input type="number" v-model="intervallometer_interval"/>
           </div>
         </div>
         <div class="row">
-          <button class="big-action-button">Start interval</button>
+          <button class="big-action-button" v-if="!intervallometer_running">Start</button>
+          <button class="big-action-button active" v-if="intervallometer_running">Stop</button>
         </div>
       </section>
 

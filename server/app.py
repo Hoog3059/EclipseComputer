@@ -5,7 +5,7 @@ from flask import Flask, Response, jsonify, render_template_string, request
 import gphoto2 as gp
 from flask_cors import CORS, cross_origin
 
-from camera_worker import camera_worker, preview_frame_queue, command_queue, get_state
+from camera_worker import camera_worker, preview_frame_queue, command_queue, get_state, camera_stop, update_state
 import camera_commands
 
 app = Flask(__name__)
@@ -75,6 +75,31 @@ def set_property(property_name):
     value = request.args.get("value")
     command_queue.put(camera_commands.SetPropertyCommand(property_name, value))
     return "", 202  # Accepted
+
+@app.route("/camera/bracket")
+def bracket():
+    iso = request.args.get("iso")
+    aperture = request.args.get("aperture")
+    shutterspeed_start = request.args.get("shutterspeed_start")
+    shutterspeed_stop = request.args.get("shutterspeed_stop")
+    command = camera_commands.PushBracketSettings(
+        iso,
+        aperture,
+        shutterspeed_start,
+        shutterspeed_stop
+    )
+    command_queue.put(command)
+    return "", 202
+
+@app.route("/camera/bracket/start")
+def start_bracket():
+    command_queue.put(camera_commands.StartBracket())
+    return "", 202
+
+@app.route("/camera/bracket/stop")
+def stop_bracket():
+    update_state("bracket_running", False)
+    return "", 202
 
 
 # @app.route("/camera/capture")
