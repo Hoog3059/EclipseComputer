@@ -165,25 +165,22 @@ def camera_worker():
                 _set_property(camera, widget, "uilock", 1)
             case camera_commands.CaptureBracket():
                 _bracket_capture_next_exposure(camera, widget, command)
-
             case camera_commands.Capture():
                 _capture(camera, widget)
-            # case CameraCommand.CAPTURE_SINGLE_HQ_PREVIEW:
-            #     _capture_hq_preview(camera, widget)
-            # case CameraCommand.START_TOTALITY_IMAGE_BURST:
-            #     _totality_image_burst(camera, widget)
-            # case IntervallometerCommand(start_stop, interval_s):
-            #     _start_stop_intervallometer(start_stop, interval_s)
-
-            # --- Brackets ---
-            # case CaptureBracketCommand(iso, aperture, start_shutterspeed, stop_shutterspeed):
-            #     pass
-            # case CameraCommand.BRACKET_NEXT_EXPOSURE:
-            #     pass
+            case camera_commands.FetchLastCapture():
+                _fetch_last_capture(camera, widget, command.callback)
 
             # --- Fallthrough ---
             case _:
                 raise ValueError(f"Command {command} is not a valid command.")
+
+
+def _fetch_last_capture(camera, widget, callback):
+    error, list = gp.gp_camera_folder_list_files(camera, "/store_00020001/DCIM/100CANON")
+    last_filename = list.get_name(list.count() - 1)
+    file = camera.file_get("/store_00020001/DCIM/100CANON", last_filename, gp.GP_FILE_TYPE_NORMAL)
+    last_capture = bytes(file.get_data_and_size())
+    callback(last_capture)
 
 
 def _bracket_capture_next_exposure(camera, widget, command: camera_commands.CaptureBracket):

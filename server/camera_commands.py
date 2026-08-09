@@ -53,3 +53,7 @@ class UnlockUI():
 
 class Capture():
     pass
+
+class FetchLastCapture():
+    def __init__(self, callback):
+        self.callback = callback

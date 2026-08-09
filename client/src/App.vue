@@ -40,6 +40,24 @@ onMounted(() => {
   window.addEventListener("resize", function () {
     wzoom.prepare();
   });
+
+  var frame2 = document.getElementById('last-capture-viewport');
+  var wzoom2 = WZoom.create('#last-capture-content', {
+    type: 'image',
+    maxScale: 10,
+    minScale: 1,
+    alignContent: "center",
+    onGrab: function () {
+      frame2.style.cursor = 'grabbing';
+    },
+    onDrop: function () {
+      frame2.style.cursor = 'grab';
+    }
+  });
+
+  window.addEventListener("resize", function () {
+    wzoom2.prepare();
+  });
 });
 
 
@@ -176,6 +194,12 @@ async function startTotalityBracket() {
 async function stopTotalityBracket() {
   await fetch(`${api_url}/camera/totality_bracket/stop`);
 }
+
+function refreshLastCapture() {
+  var image_tag = document.getElementById("last-capture-content");
+  var time = Date.now();
+  image_tag.src = api_url + "/camera/last_capture.jpg?t=" + time;
+}
 </script>
 
 <template>
@@ -186,7 +210,7 @@ async function stopTotalityBracket() {
       <div class="header-item" v-if="camera_connected">📷✅</div>
       <div class="header-item" v-if="!camera_connected">📷❌</div>
       <div class="header-item">🔋{{ batterylevel }}</div>
-      <div class="header-item">{{ base_url }}</div>
+      <!-- <div class="header-item">{{ base_url }}</div> -->
       <div class="header-item align-right">
         <div>
           <label>UI</label>
@@ -578,10 +602,10 @@ async function stopTotalityBracket() {
     <!-- Last capture mode -->
     <main v-show="uiMode === 'last'">
       <section id="last-capture-viewport">
-        <img id="last-capture-content" :src="api_url + '/preview_feed'" />
+        <img id="last-capture-content" :src="api_url + '/camera/last_capture_placeholder.jpg'" />
       </section>
       <section id="retrieve-button-container" class="row">
-        <button class="big-action-button">Refresh</button>
+        <button class="big-action-button" @click="refreshLastCapture">Refresh</button>
       </section>
     </main>
   </div>
@@ -769,12 +793,6 @@ nav button:active {
 
   cursor: grab;
 }
-
-#preview-content {
-  /* width: auto;
-  height: auto;
-  margin: auto; */
-}
 </style>
 
 <!-- Focus buttons -->
@@ -841,6 +859,10 @@ nav button:active {
   align-items: center;
 
   cursor: grab;
+}
+
+#last-capture-content {
+  width: 100vw;
 }
 
 #retrieve-button-container {

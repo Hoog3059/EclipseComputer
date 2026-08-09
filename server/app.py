@@ -1,7 +1,7 @@
 import time
 import queue
 import threading
-from flask import Flask, Response, jsonify, render_template_string, request
+from flask import Flask, Response, jsonify, render_template_string, request, make_response
 import gphoto2 as gp
 from flask_cors import CORS, cross_origin
 
@@ -231,6 +231,43 @@ def capture():
     command_queue.put(camera_commands.Capture())
     return "", 202
 
+####################
+# Get last picture #
+####################
+@app.route("/camera/last_capture.jpg")
+def get_last_capture():
+    done_getting = False
+    last_capture = None
+    def finished(image):
+        nonlocal done_getting, last_capture
+        done_getting = True
+        last_capture = image
+    command_queue.put(camera_commands.FetchLastCapture(finished))
+    loop_count = 0
+    while not done_getting:
+        time.sleep(1) # Yield to multithreader and come back to check
+        loop_count += 1
+
+        if loop_count > 10:
+            placeholder = open("./placeholder_last_image.jpg", "rb").read()
+            last_capture = placeholder
+            break
+        
+    response = make_response(last_capture)
+    response.headers.set('Content-Type', 'image/jpeg')
+    response.headers.set('Content-Disposition', 'attachment', filename='last_capture.jpg')
+    return response
+
+@app.route("/camera/last_capture_placeholder.jpg")
+def get_last_capture_placeholder():
+    placeholder = open("./placeholder_last_image.jpg", "rb").read()
+    last_capture = placeholder
+    response = make_response(last_capture)
+    response.headers.set('Content-Type', 'image/jpeg')
+    response.headers.set('Content-Disposition', 'attachment', filename='last_capture.jpg')
+    return response
+    
+    
 
 if __name__ == "__main__":
     camera_worker_thread = threading.Thread(target=camera_worker, daemon=True)
