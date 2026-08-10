@@ -1,10 +1,18 @@
 <script setup>
 import { onMounted, ref } from "vue";
 import WZoom from "vanilla-js-wheel-zoom";
-const protocol = import.meta.env.VITE_SERVER_PROTOCOL;
-const host = import.meta.env.VITE_SERVER_HOST;
-const port = import.meta.env.VITE_SERVER_PORT;
-const api_url = `${protocol}://${host}:${port}`
+
+
+
+// const protocol = import.meta.env.VITE_SERVER_PROTOCOL;
+// const host = import.meta.env.VITE_SERVER_HOST;
+// const port = import.meta.env.VITE_SERVER_PORT;
+// const api_url = `${protocol}://${host}:${port}`
+
+const protocol = "http";
+const hostname = window.location.hostname;
+const port = "5000";
+const api_url = `${protocol}://${host}:${port}`;
 
 // --- UI Switching ---
 const uiMode = ref('bracket');
