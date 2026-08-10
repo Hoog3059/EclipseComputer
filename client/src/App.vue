@@ -12,7 +12,7 @@ import WZoom from "vanilla-js-wheel-zoom";
 const protocol = "http";
 const hostname = window.location.hostname;
 const port = "5000";
-const api_url = `${protocol}://${host}:${port}`;
+const api_url = `${protocol}://${hostname}:${port}`;
 
 // --- UI Switching ---
 const uiMode = ref('bracket');
